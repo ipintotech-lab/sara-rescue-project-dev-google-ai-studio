@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SARA C2 simulation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+/* VOICE: a rescue command post console. Dense, calm, legible under stress.
+   IDEA: the map table in a forward command vehicle: one aerial sheet with layers laid over it.
+   PICTURE: the neighborhood itself, drawn as aerial imagery, before and after, with phones and reports pinned on it.
+   COLOUR and TYPE: graphite night ground; orange for damage, magenta for phones, cyan for drone data. IBM Plex Sans + Condensed.
+   LAYOUT: command bar on top, map dominant with side panels; the building file is a grid of evidence panes. */
+:root{--bg:#0e1113;--p1:#15191c;--p2:#1b2024;--p3:#232a2f;--ln:#2c3338;--ink:#e7eaec;--mu:#929ba2;--or:#ff6a2b;--mg:#ff3fa4;--cy:#45c4ea;--yl:#f2d14e;--sc:#ff4d2e;--sp:#ff9a3c;--sd:#f2d14e;color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 'IBM Plex Sans',system-ui,sans-serif;display:grid;grid-template-rows:auto 1fr;overflow:hidden}
+h1,h2,h3,.cond{font-family:'IBM Plex Sans Condensed','IBM Plex Sans',sans-serif;font-weight:600;margin:0}
+button,select,input{font:inherit;color:inherit}
+button{background:var(--p3);border:1px solid var(--ln);border-radius:6px;padding:7px 12px;cursor:pointer;min-height:36px}
+button:hover{border-color:#46515a}button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--cy);outline-offset:1px}
+button.pri{background:var(--or);border-color:var(--or);color:#160800;font-weight:600}
+button.pri:disabled{opacity:.4;cursor:not-allowed}
+button.on{background:#2d3a42;border-color:var(--cy);color:#fff}
+select,input{background:var(--p2);border:1px solid var(--ln);border-radius:6px;padding:7px 9px;min-height:36px}
+.mu{color:var(--mu)}.sm{font-size:13px}
+.seg{display:inline-flex;border:1px solid var(--ln);border-radius:7px;overflow:hidden}
+.seg button{border:0;border-radius:0;border-right:1px solid var(--ln);background:var(--p2)}.seg button:last-child{border-right:0}
+.seg button.on{background:#2d3a42;color:#fff;box-shadow:inset 0 -2px 0 var(--cy)}
+/* top bar */
+.top{display:flex;align-items:center;gap:14px;padding:8px 14px;background:#0a0c0e;border-bottom:1px solid var(--ln);flex-wrap:wrap}
+.brand{font:700 20px/1 'IBM Plex Sans Condensed';letter-spacing:.02em;display:flex;align-items:center;gap:8px}
+.brand i{width:12px;height:12px;border-radius:50%;background:var(--or);box-shadow:0 0 0 3px #ff6a2b33}
+.nav{display:flex;gap:4px}.nav a{color:var(--mu);text-decoration:none;padding:7px 10px;border-radius:6px}
+.nav a.on{color:#fff;background:var(--p3)}.nav a.dis{opacity:.35;pointer-events:none}
+.evn{font-weight:600}.grow{flex:1}
+.clock{font:600 18px/1 'IBM Plex Sans Condensed';font-variant-numeric:tabular-nums}
+.clock small{font:13px 'IBM Plex Sans';color:var(--mu);margin-left:6px}
+.link{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--mu)}
+.dot{width:9px;height:9px;border-radius:50%;background:#59626a;display:inline-block}
+.dot.ok{background:var(--cy);box-shadow:0 0 6px var(--cy)}.dot.off{background:var(--yl)}
+.view{display:none;min-height:0;overflow:auto}.view.on{display:block}
+/* chips */
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:13px;padding:2px 8px;border-radius:20px;background:var(--p3);color:var(--mu);white-space:nowrap}
+.chip.ld{color:var(--cy);background:#163240}.chip.ld::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--cy);animation:pl 1s infinite}
+.chip.ok{color:#d9f4ff;background:#1d3e4c}.chip.wa{color:#211a00;background:var(--yl)}
+.chip.c{background:var(--sc);color:#1a0500}.chip.p{background:var(--sp);color:#1a0b00}.chip.d{background:var(--sd);color:#1a1500}
+.chip.mg{background:#4a1533;color:#ffc4e3}.chip.fl{background:#4a1d1d;color:#ffb3a6}
+@keyframes pl{50%{opacity:.25}}
+@media(prefers-reduced-motion:reduce){.chip.ld::before{animation:none}}
+/* command */
+.cmd{display:grid;grid-template-columns:270px minmax(0,1fr);min-height:100%}
+.evs{background:var(--p1);border-right:1px solid var(--ln);padding:18px;display:flex;flex-direction:column;gap:12px}
+.evcard{background:var(--p2);border:1px solid var(--ln);border-radius:8px;padding:12px;display:grid;gap:6px}
+.evcard.act{border-color:var(--or)}
+.wiz{padding:18px 22px;display:flex;flex-direction:column;gap:16px;min-height:0}
+.steps{display:flex;gap:6px;flex-wrap:wrap}
+.steps span{padding:6px 12px;border-radius:20px;background:var(--p2);color:var(--mu);font-size:13px}
+.steps span.on{background:var(--or);color:#160800;font-weight:600}.steps span.done{color:var(--ink)}
+.form{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px 22px;max-width:980px}
+.fld{display:grid;gap:6px}.fld label{font-size:13px;color:var(--mu)}
+.full{grid-column:1/-1}
+.sugg{display:grid;gap:4px}
+.sugg button{text-align:left;display:flex;justify-content:space-between;gap:8px;background:var(--p2)}
+.sugg button.on{border-color:var(--or);background:#2a1a12}
+.loccard{background:var(--p2);border:1px solid var(--ln);border-radius:8px;padding:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.loccard b{display:block;font:600 16px 'IBM Plex Sans Condensed'}
+.w2{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:14px;min-height:560px;height:calc(100vh - 190px)}
+.mapbox{position:relative;background:#111;border:1px solid var(--ln);border-radius:8px;overflow:hidden;min-height:420px}
+.mapbox svg{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.mtools{position:absolute;top:10px;left:10px;right:10px;display:flex;gap:8px;flex-wrap:wrap;z-index:2;pointer-events:none}
+.mtools>*{pointer-events:auto}
+.hint{position:absolute;bottom:10px;left:10px;z-index:2;background:#0a0c0ee6;padding:7px 11px;border-radius:6px;font-size:13px;max-width:70%}
+.selside{background:var(--p1);border:1px solid var(--ln);border-radius:8px;display:flex;flex-direction:column;min-height:0}
+.selside .hd{padding:12px 14px;border-bottom:1px solid var(--ln)}
+.sellist{overflow:auto;flex:1;padding:6px}
+.selrow{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px;align-items:center;padding:6px 8px;border-radius:6px}
+.selrow:hover{background:var(--p2)}.selrow select{min-height:30px;padding:3px 6px;font-size:13px}
+.selrow .x{min-height:30px;padding:2px 9px}
+.tot{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px 14px;border-top:1px solid var(--ln)}
+.tot div b{display:block;font:600 20px 'IBM Plex Sans Condensed';font-variant-numeric:tabular-nums}
+.files{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+.file{background:var(--p2);border:1px solid var(--ln);border-radius:8px;padding:12px;display:grid;gap:8px;cursor:pointer}
+.file:hover{border-color:#4b565e}
+.lrow{display:flex;gap:4px;flex-wrap:wrap}
+.lrow .chip{font-size:12px;padding:1px 7px}
+/* area */
+.area{display:grid;grid-template-rows:auto 1fr;height:100%}
+.kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border-bottom:1px solid var(--ln);background:var(--p1)}
+.kpi{padding:10px 14px;border-right:1px solid var(--ln)}
+.kpi b{display:block;font:600 24px/1.1 'IBM Plex Sans Condensed';font-variant-numeric:tabular-nums}
+.kpi span{font-size:13px;color:var(--mu)}
+.amain{display:grid;grid-template-columns:minmax(0,1fr) 400px;min-height:0}
+.amap{position:relative;min-height:420px;background:#0b0d0f;overflow:hidden}
+.amap svg,.amap canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.layers{position:absolute;left:10px;bottom:10px;z-index:2;background:#0a0c0eeb;border:1px solid var(--ln);border-radius:8px;padding:10px 12px;display:grid;gap:3px;font-size:13px}
+.layers label{display:flex;align-items:center;gap:7px;cursor:pointer;min-height:24px}
+.layers input{min-height:auto;accent-color:var(--cy)}
+.sw{width:14px;height:4px;border-radius:2px;display:inline-block}
+.zoom{position:absolute;right:10px;bottom:10px;z-index:2;display:grid;gap:4px}
+.zoom button{width:38px;padding:0}
+.ostat{position:absolute;right:10px;top:56px;z-index:2;background:#0a0c0eeb;border:1px solid var(--ln);border-radius:8px;padding:8px 11px;font-size:13px;max-width:300px}
+.tip{position:fixed;z-index:20;pointer-events:none;background:#0a0c0ef2;border:1px solid var(--ln);border-radius:7px;padding:8px 10px;font-size:13px;display:none;max-width:260px}
+.pop{position:absolute;z-index:5;background:var(--p2);border:1px solid var(--ln);border-radius:8px;padding:12px;display:grid;gap:8px;width:240px;box-shadow:0 8px 30px #0008}
+.side{background:var(--p1);border-left:1px solid var(--ln);display:grid;grid-template-rows:auto 1fr;min-height:0}
+.tabs{display:flex;flex-wrap:wrap;gap:2px;padding:8px;border-bottom:1px solid var(--ln)}
+.tabs button{border:0;background:none;color:var(--mu);padding:6px 9px;min-height:32px}
+.tabs button.on{color:#fff;background:var(--p3)}
+.sbody{overflow:auto;padding:10px;min-height:0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--mu);font-weight:500;padding:6px;border-bottom:1px solid var(--ln);position:sticky;top:0;background:var(--p1)}
+td{padding:6px;border-bottom:1px solid #22292e;vertical-align:top}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+tr.cl{cursor:pointer}tr.cl:hover td{background:var(--p2)}
+.bar{height:6px;background:var(--p3);border-radius:3px;overflow:hidden;min-width:50px}.bar i{display:block;height:100%;background:var(--or)}
+.feed{display:grid;gap:6px}
+.msg{background:var(--p2);border-radius:7px;padding:9px 11px;display:grid;gap:5px;border-left:3px solid #48525a}
+.msg.supported{border-left-color:var(--or)}.msg.verified{border-left-color:var(--cy)}.msg.flagged{border-left-color:#c0392b;opacity:.8}
+.msg .meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12.5px;color:var(--mu)}
+.msg button{min-height:30px;padding:3px 10px;font-size:13px;justify-self:start}
+.asset{background:var(--p2);border-radius:8px;padding:10px 12px;display:grid;gap:5px;margin-bottom:8px}
+.asset b{font:600 15px 'IBM Plex Sans Condensed'}
+.log div{display:grid;grid-template-columns:62px minmax(0,1fr);gap:8px;padding:5px 2px;border-bottom:1px solid #22292e;font-size:13px}
+.log span{color:var(--mu);font-variant-numeric:tabular-nums}
+.inv{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
+.invc{background:var(--p2);border-radius:8px;overflow:hidden;cursor:pointer;border:1px solid transparent}
+.invc:hover{border-color:#4b565e}.invc svg{display:block;width:100%;height:auto}
+.invc div{padding:7px 9px;font-size:12.5px}
+.phase2{background:#2a1222;border:1px solid #5a2347;border-radius:7px;padding:8px 10px;font-size:13px;color:#ffc4e3;margin-bottom:8px}
+/* building */
+.bhead{display:flex;gap:12px 18px;align-items:center;flex-wrap:wrap;padding:12px 16px;background:var(--p1);border-bottom:1px solid var(--ln);position:sticky;top:0;z-index:4}
+.bhead h1{font-size:26px;line-height:1.05}
+.facts{display:flex;gap:6px;flex-wrap:wrap}
+.score{display:grid;gap:3px;min-width:140px}.score b{font:600 22px 'IBM Plex Sans Condensed'}
+.bgrid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;padding:12px 16px 30px}
+.pane{grid-column:span 2;background:var(--p1);border:1px solid var(--ln);border-radius:9px;display:grid;grid-template-rows:auto minmax(0,1fr);height:340px;overflow:hidden}
+.pane.big{grid-column:span 3;height:450px}.pane.w4,.pane.lt{height:380px}.pane.w4{grid-column:span 4}
+.pane>header{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--ln);flex-wrap:wrap}
+.pane>header h3{font-size:15px}.pane>header .src{font-size:12.5px;color:var(--mu);flex:1}
+.pbody{position:relative;min-height:0;overflow:auto}
+.pbody.fill svg,.pbody.fill canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.pbody.pad{padding:10px 12px}
+.wait{position:absolute;inset:0;display:grid;place-content:center;text-align:center;gap:8px;background:#0e1113d9;z-index:3;padding:20px}
+.wait b{font:600 17px 'IBM Plex Sans Condensed'}
+.prog{height:6px;width:220px;background:var(--p3);border-radius:3px;overflow:hidden;justify-self:center}.prog i{display:block;height:100%;background:var(--cy)}
+.ov{position:absolute;z-index:2;left:8px;top:8px;display:flex;gap:6px;flex-wrap:wrap}
+.ov .seg button{min-height:30px;padding:3px 9px;font-size:13px}
+.fsel{display:flex;gap:3px;flex-wrap:wrap;padding:8px 10px;border-top:1px solid var(--ln)}
+.fsel button{min-height:30px;min-width:34px;padding:2px 6px;font-size:13px}
+.lay div{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid #22292e}
+.lay code{font:600 12px 'IBM Plex Sans Condensed';color:var(--mu)}
+@media(max-width:1200px){.amain{grid-template-columns:minmax(0,1fr) 340px}.pane,.pane.big,.pane.w4{grid-column:span 3}.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:860px){body{overflow:auto;height:auto}.cmd{grid-template-columns:1fr}.evs{border-right:0;border-bottom:1px solid var(--ln)}
+ .form{grid-template-columns:1fr}.w2{grid-template-columns:1fr;height:auto}.mapbox{height:60vh}.amain{grid-template-columns:1fr}.amap{height:62vh}.side{border-left:0;max-height:none}
+ .pane,.pane.big,.pane.w4{grid-column:1/-1}.bgrid{grid-template-columns:1fr}.bhead{position:static}.view{overflow:visible}.area{height:auto}}
+@media(max-width:600px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.top{gap:8px}.clock{font-size:16px}.bhead h1{font-size:21px}}
+</style></head><body>
+<header class="top">
+ <div class="brand"><i></i>SARA</div>
+ <nav class="nav"><a href="#command" id="n-command">Command</a><a href="#area" id="n-area">Area view</a><a href="#" id="n-b">Building file</a></nav>
+ <select id="bjump" aria-label="Open building file" hidden></select>
+ <span class="evn" id="evn"></span><span class="grow"></span>
+ <div class="clock" id="clock">No active event</div>
+ <div class="seg" id="simc" hidden><button data-sp="0" title="Pause">❚❚</button><button data-sp="1">1×</button><button data-sp="5">5×</button><button data-sp="20">20×</button><button data-jump="15">+15m</button><button data-jump="60">+1h</button></div>
+ <div class="link" id="link"><span class="dot"></span>Field kit</div>
+</header>
+
+<main class="view" id="v-command">
+ <section class="cmd">
+  <aside class="evs">
+   <h2>Events</h2>
+   <div id="evlist" class="sm mu">No active event. Open a new event when the team is dispatched.</div>
+   <button class="pri" id="bnew">New event</button>
+   <button id="bdemo">Load demo event</button>
+   <p class="sm mu" style="margin:0">Demo: missile strike in Bat Yam, 20 Nov 13:29. The affected area is already marked with a polygon.</p>
+   <p class="sm mu" style="margin:auto 0 0">Simulated data throughout. The map is drawn procedurally. Live map tiles are not loaded in this demo.</p>
+  </aside>
+  <div class="wiz">
+   <div class="steps" id="steps"><span data-s="1">1 · Location and time</span><span data-s="2">2 · Mark affected buildings</span><span data-s="3">3 · Building files</span></div>
+   <div id="wz1">
+    <div class="form">
+     <div class="fld full"><label>Event type</label><div class="seg" id="etype"></div></div>
+     <div class="fld"><label for="qloc">Location: address, neighborhood or city</label><input id="qloc" placeholder="e.g. Bat Yam, Balfour" autocomplete="off"><div class="sugg" id="sugg"></div></div>
+     <div class="fld"><label for="edate">Date and time of the event</label><input id="edate" type="datetime-local" value="2026-11-20T13:29">
+      <label for="esrc" style="margin-top:8px">Pre-disaster aerial and base map (L1/L2)</label><select id="esrc"></select>
+      <label for="ebsrc" style="margin-top:8px">Building outlines and floors (L3)</label><select id="ebsrc"></select></div>
+     <div class="full loccard" id="loccard"></div>
+     <div class="full"><button class="pri" id="bto2" disabled>Open map of the area →</button></div>
+    </div>
+   </div>
+   <div id="wz2" hidden>
+    <div class="w2">
+     <div class="mapbox" id="wbox">
+      <div class="mtools">
+       <div class="seg" id="wtool"><button data-t="select" class="on">Select buildings</button><button data-t="poly">Draw polygon</button></div>
+       <div class="seg" id="wmode"><button data-m="pre" class="on">Aerial (pre-event)</button><button data-m="gis">Map</button></div>
+       <button id="wclear">Clear</button><button id="wclose" hidden>Close polygon</button>
+      </div>
+      <svg id="wmap" aria-label="Map of the event area"></svg>
+      <div class="hint" id="whint"></div>
+     </div>
+     <div class="selside">
+      <div class="hd"><h3>Hit buildings</h3><div class="sm mu" id="wsrc"></div></div>
+      <div class="sellist" id="sellist"></div>
+      <div class="tot" id="seltot"></div>
+      <div style="padding:0 14px 14px;display:grid;gap:8px"><button class="pri" id="binit" disabled>Initiate building files</button><button id="bback1">← Back</button></div>
+     </div>
+    </div>
+   </div>
+   <div id="wz3" hidden>
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px"><h2 id="w3t"></h2><span class="grow"></span><button class="pri" data-go="area">Open area view →</button></div>
+    <p class="mu sm" style="margin:0 0 12px">Each file starts from the offline layers on the field kit (L1 to L4), then pulls OSINT, archive plans and the residents register, and later the drone layers. Click a file to open it.</p>
+    <div class="files" id="files"></div>
+   </div>
+  </div>
+ </section>
+</main>
+
+<main class="view" id="v-area">
+ <section class="area">
+  <div class="kpis" id="kpis"></div>
+  <div class="amain">
+   <div class="amap" id="abox">
+    <div class="mtools"><div class="seg" id="amode"><button data-m="now" class="on">Current aerial</button><button data-m="swipe">Swipe compare</button><button data-m="pre">Pre-disaster</button><button data-m="gis">GIS map</button><button data-m="3d">3D area</button></div></div>
+    <svg id="amap" aria-label="Area map"></svg><canvas id="a3d" hidden></canvas>
+    <div class="ostat" id="ostat"></div>
+    <div class="layers" id="alay"></div>
+    <div class="zoom" id="azoom"><button data-z="1.4" aria-label="Zoom in">+</button><button data-z="0.7" aria-label="Zoom out">−</button><button data-z="0" aria-label="Fit" style="font-size:12px">Fit</button></div>
+    <div class="pop" id="apop" hidden></div>
+   </div>
+   <aside class="side"><div class="tabs" id="atabs"></div><div class="sbody" id="abody"></div></aside>
+  </div>
+ </section>
+</main>
+
+<main class="view" id="v-b">
+ <div class="bhead" id="bhead"></div>
+ <div class="bgrid">
+  <section class="pane big"><header><h3>Current aerial (drone)</h3><span class="src" id="s-now"></span><span id="c-now"></span></header><div class="pbody fill"><svg id="bnow"></svg><div class="ov"><div class="seg" id="bnowm"><button data-m="now" class="on">Now</button><button data-m="swipe">Swipe</button></div></div><div id="w-now"></div></div></section>
+  <section class="pane big"><header><h3>3D model</h3><span class="src" id="s-3d"></span><span id="c-3d"></span></header><div class="pbody fill"><canvas id="b3d"></canvas><div class="ov"><div class="seg" id="b3dm"><button data-m="x" class="on">X-ray phones</button><button data-m="r">Auto-rotate</button></div></div><div id="w-3d"></div></div></section>
+  <section class="pane"><header><h3>Location</h3><span class="src" id="s-map"></span><span id="c-map"></span></header><div class="pbody fill"><svg id="bmap"></svg><div id="w-map"></div></div></section>
+  <section class="pane"><header><h3>Pre-disaster aerial</h3><span class="src" id="s-pre"></span><span id="c-pre"></span></header><div class="pbody fill"><svg id="bpre"></svg><div id="w-pre"></div></div></section>
+  <section class="pane"><header><h3>Street view</h3><span class="src" id="s-sv"></span><span id="c-sv"></span></header><div class="pbody fill"><svg id="bsv" viewBox="0 0 400 240" preserveAspectRatio="xMidYMid slice"></svg><div class="ov" id="svsw"></div><div id="w-sv"></div></div></section>
+  <section class="pane lt" style="grid-template-rows:auto minmax(0,1fr) auto"><header><h3>Blueprint and architecture</h3><span class="src" id="s-bp"></span><span id="c-bp"></span></header><div class="pbody fill"><svg id="bbp" viewBox="0 0 380 250"></svg><div id="w-bp"></div></div><div class="fsel" id="bfl"></div></section>
+  <section class="pane lt"><header><h3>Residents</h3><span class="src" id="s-res"></span><span id="c-res"></span></header><div class="pbody pad" id="bres"></div></section>
+  <section class="pane lt"><header><h3>Reports (OSINT and hotlines)</h3><span class="src"></span><span id="c-os"></span></header><div class="pbody pad" id="bos"></div></section>
+  <section class="pane w4"><header><h3>Phones detected (IMSI)</h3><span class="src">Active cellular locator on drone · Phase 2</span><span id="c-im"></span></header><div class="pbody pad" id="bim"></div></section>
+  <section class="pane lt"><header><h3>Data layers in this file</h3><span class="src"></span><span id="c-lay"></span></header><div class="pbody pad lay" id="blay"></div></section>
+ </div>
+</main>
+<div class="tip" id="tip"></div>
+
+<script>
+(()=>{
+const $=(s,r=document)=>r.querySelector(s);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const pad=n=>String(n).padStart(2,'0');
+const fT=t=>{t=Math.max(0,t);return `T+${pad(Math.floor(t/60))}:${pad(Math.floor(t%60))}`};
+function rng(seed){let a=seed>>>0;const f=()=>{a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
+ f.int=(l,h)=>l+Math.floor(f()*(h-l+1));f.r=(l,h)=>l+f()*(h-l);f.pick=a=>a[Math.floor(f()*a.length)];return f}
+
+const LOCS=[
+ {id:'batyam',name:'Bat Yam — Ramat Yosef',city:'Bat Yam',cc:'IL',seed:1301,ll:'32.012° N, 34.749° E',h:['HaAtzmaut','Balfour','Yoseftal','Sokolov','Ben Gurion','Herzl','HaKomemiyut'],v:['Rothschild','Arlozorov','Bialik','Weizmann','Katznelson','Hanna Senesh','Nordau','Jabotinsky']},
+ {id:'haifa',name:'Haifa — Hadar HaCarmel',city:'Haifa',cc:'IL',seed:2207,ll:'32.809° N, 34.998° E',h:['Herzl','HaHalutz','Masada','Arlozorov','Balfour','HaNevi\'im'],v:['Shmaryahu Levin','Nordau','Hillel','Syrkin','Pevsner','Bialik','Ahad Ha\'am']},
+ {id:'rehovot',name:'Rehovot — Old North',city:'Rehovot',cc:'IL',seed:3313,ll:'31.898° N, 34.811° E',h:['Herzl','Bilu','Ya\'akov','Ezra','Gordon','HaShomer'],v:['Weizmann','Rabin','Moskowitz','Levin Epstein','Sirni','Ben Yehuda','Ahad Ha\'am']},
+ {id:'tamra',name:'Tamra — Center',city:'Tamra',cc:'IL',seed:4409,ll:'32.853° N, 35.198° E',h:['Main St.','Al-Bayader','Al-Zaytoun','Al-Nur','Al-Salam','Al-Quds'],v:['Al-Madares','Al-Jamea','Al-Rabie','Al-Wadi','Al-Bustan','Al-Karmel','Al-Ain']},
+ {id:'antakya',name:'Antakya, Hatay — training scenario',city:'Antakya',cc:'TR',seed:5501,ll:'36.202° N, 36.160° E',h:['Kurtuluş Cd.','Hürriyet Cd.','İstiklal Cd.','Atatürk Cd.','Gündüz Cd.','Saray Cd.'],v:['Yavuz Sk.','Fevzi Paşa Sk.','Ulus Sk.','Uzun Çarşı','Zenginler Sk.','Köprübaşı Sk.','Sarayönü Sk.']}];
+const SRC={IL:{base:['GovMap orthophoto 2024 (Survey of Israel)','OpenStreetMap','Google Maps satellite (online only)'],b:['GovMap buildings + Overture','Overture Maps buildings','OpenStreetMap'],arch:'Municipal engineering archive',res:'Municipal residents register + 104 list',teams:['Unassigned','HFC Rescue 1','HFC Rescue 2','Fire & Rescue — Dan','MDA','United Hatzalah']},
+ TR:{base:['Maxar archive (pre-event, licensed)','OpenStreetMap','Google Maps satellite (online only)'],b:['Overture Maps buildings','OpenStreetMap'],arch:'e-Devlet building registry',res:'Muhtar residents list + AFAD',teams:['Unassigned','AFAD 1','AKUT','IL Aid Unit','UK ISAR']}};
+const TYPES=['Missile strike','Earthquake','Explosion','Structural collapse'];
+const SEV={c:{n:'Collapsed',col:'#ff4d2e',w:40},p:{n:'Partial collapse',col:'#ff9a3c',w:25},d:{n:'Damaged',col:'#f2d14e',w:10}};
+const CARR={IL:['Partner','Cellcom','Pelephone','HOT mobile','Golan'],TR:['Turkcell','Vodafone TR','Türk Telekom']};
+const REPLIES=['2 of us, floor {F}, near the stairs. My leg is stuck','Under the kitchen table. I can hear you knocking','Me and my mother. Air is OK. Battery 9%','In the safe room, the door is jammed','I am alone, can\'t move my arm. Please hurry'];
+const S={ev:null,t:0,run:false,speed:5,view:'command',bid:null,
+ w:{step:1,loc:null,type:0,src:0,bsrc:0,tool:'select',sel:new Map(),poly:[],closed:false,mode:'pre',city:null,cur:null,vb:null},
+ amode:'now',vb:null,swipe:0,lay:{fp:false,util:false,poly:true,dmg:true,imsi:true,osint:true,drone:true,teams:true},tab:'prio',rf:'all',bnow:'now',fl:{},sv:{},x3:true,rot:false};
+
+/* ---------- city generation ---------- */
+function genCity(loc){
+ const R=rng(loc.seed),W=1200,H=800,vx=[],hy=[];
+ for(let x=R.int(70,120);x<W-20;x+=R.int(170,215))vx.push(x);
+ for(let y=R.int(55,90);y<H-20;y+=R.int(140,172))hy.push(y);
+ const vw=vx.map((_,i)=>i%3==1?30:18),hw=hy.map((_,i)=>i%2==0?26:18);
+ const streets=[...vx.map((x,i)=>({d:'v',x,w:vw[i],name:loc.v[i%loc.v.length]})),...hy.map((y,i)=>({d:'h',y,w:hw[i],name:loc.h[i%loc.h.length]}))];
+ const X=[-60,...vx,W+60],Y=[-60,...hy,H+60],hx=k=>k>=1&&k<=vx.length?vw[k-1]/2:0,hyw=k=>k>=1&&k<=hy.length?hw[k-1]/2:0;
+ const blocks=[],bl=[];const park=[R.int(1,vx.length-1),R.int(1,hy.length-1)];
+ for(let i=0;i<X.length-1;i++)for(let j=0;j<Y.length-1;j++){
+  const b={x:X[i]+hx(i)+3,y:Y[j]+hyw(j)+3,top:j>=1?hy[j-1]:null,bot:j<hy.length?hy[j]:null,tn:j>=1?streets[vx.length+j-1].name:null,bn:j<hy.length?streets[vx.length+j].name:null};
+  b.w=X[i+1]-hx(i+1)-3-b.x;b.h=Y[j+1]-hyw(j+1)-3-b.y;b.park=i==park[0]&&j==park[1];blocks.push(b)}
+ for(const b of blocks){if(b.park)continue;const rows=b.h>105?2:1,rh=b.h/rows;
+  for(let r=0;r<rows;r++){let cx=b.x+3;const end=b.x+b.w-3;
+   while(end-cx>=34){let lw=R.int(44,72);if(end-cx-lw<34)lw=end-cx;
+    if(R()>.1){const m=R.int(3,7),w=Math.max(22,lw-2*m-R.int(0,6)),h=Math.max(22,Math.min(rh-2*m-R.int(0,10),72));
+     const y=rows==1?b.y+(b.h-h)/2:r==0?b.y+m+1:b.y+b.h-m-1-h,x=cx+m+R.int(0,Math.max(0,lw-2*m-w));
+     const cxx=x+w/2,cyy=y+h/2;
+     if(cxx>-5&&cxx<W+5&&cyy>-5&&cyy<H+5){
+      const tall=R()<.12,fl=tall?R.int(10,16):R.int(3,8),area=w*.5*h*.5,pf=clamp(Math.round(area/95),2,6),yr=tall?R.int(1996,2019):R.int(1954,2006);
+      let st=(r==0?b.tn:b.bn)||(r==0?b.bn:b.tn)||loc.h[0];const side=(r==0&&b.tn)||(!b.tn&&r==1)?0:1;
+      bl.push({id:bl.length,x,y,w,h,cx:cxx,cy:cyy,floors:fl,pf,units:fl*pf,year:yr,
+       cons:yr<1975?'Concrete frame, block infill':yr<1993?'RC frame, prefab panels':'RC frame + shear walls',
+       shelter:yr>=1993?'Safe room in each flat':R()<.45?'Shared basement shelter':'No shelter registered',
+       roof:R.pick(['#cbc5ba','#bdb6aa','#d8d3ca','#b6a690','#a9a399','#c4bdb0']),fac:R.pick(['#d9cfbd','#e2dccf','#cdbfa6','#d4cfc6','#bfb5a5']),tanks:R.int(1,Math.min(6,pf+2)),street:st,side,ent:R.pick(['A','B'])})}}
+    cx+=lw}}}
+ const groups={};for(const b of bl){const k=b.street+'|'+b.side;(groups[k]=groups[k]||[]).push(b)}
+ for(const k in groups){groups[k].sort((a,b)=>a.cx-b.cx).forEach((b,i)=>{b.num=b.side==0?2+i*2:1+i*2;b.addr=`${b.street} ${b.num}`})}
+ return {W,H,streets,blocks,bl,seed:loc.seed,loc}
+}
+
+/* ---------- event + schedules ---------- */
+function inPoly(p,poly){let c=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const a=poly[i],b=poly[j];if(((a[1]>p[1])!=(b[1]>p[1]))&&(p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0]))c=!c}return c}
+function makeEvent(loc,city,sel,poly,type,src,bsrc,date){
+ const ev={loc,city,type,src,bsrc,date:new Date(date),poly,H:{},hits:[],msgs:[],sms:{},ver:{},team:{},seq:0};
+ let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;for(const id of sel.keys()){const b=city.bl[id];x0=Math.min(x0,b.x);y0=Math.min(y0,b.y);x1=Math.max(x1,b.x+b.w);y1=Math.max(y1,b.y+b.h)}
+ x0-=70;y0-=70;x1+=70;y1+=70;const n=Math.max(3,Math.ceil((x1-x0)/70));ev.fb={x0,y0,x1,y1,n,sw:(x1-x0)/n,T0:18,T1:38};
+ ev.cx=(x0+x1)/2;ev.cy=(y0+y1)/2;
+ ev.drones=[{id:'M-1',kind:'Mapping drone',free:50,tasks:[]},{id:'O-1',kind:'3D orbit drone',free:42,tasks:[]}];
+ for(const [id,sev] of sel)addHit(ev,id,sev,0);
+ planOrbits(ev);addFakes(ev);return ev}
+function covAt(ev,x,y,at){const f=ev.fb;if(at<f.T0-2&&x>=f.x0&&x<=f.x1&&y>=f.y0&&y<=f.y1){const k=clamp(Math.floor((x-f.x0)/f.sw),0,f.n-1),q=k%2==0?(y-f.y0)/(f.y1-f.y0):(f.y1-y)/(f.y1-f.y0);return f.T0+(k+q)/f.n*(f.T1-f.T0)}
+ for(let r=120;;r+=60)if(r>=at+5)return r+4}
+function addHit(ev,id,sev,at){
+ const b=ev.city.bl[id],R=rng(ev.loc.seed*31+id*7+1),cc=ev.loc.cc;
+ const h={id,sev,at,l1:at+.2+R()*.6,l2:at+.4+R()*.9,l3:at+.7+R()*1.2,l4m:R()<.8?at+1+R()*3:null,l4g:Math.max(at,25)+1+R()*6,bpA:R()<.65,bpT:Math.max(at,25)+12+R()*80,resT:at+28+R()*40,dev:[],units:[],R};
+ h.cov=covAt(ev,b.cx,b.cy,at);
+ const nd={c:R.int(1,6),p:R.int(0,4),d:R.int(0,2)}[sev];
+ for(let k=0;k<nd;k++)h.dev.push({k,fx:R.r(.15,.85),fy:R.r(.15,.85),floor:R.int(0,b.floors-1),acc:R.r(1.6,2.9),carrier:R.pick(CARR[cc]),imsi:`${cc=='IL'?425:286} 0${R.int(1,9)} ••••• ${R.int(1000,9999)}`,rssi:-R.int(78,112),t2:h.cov+R.r(.5,4),dead:R()<.18?h.cov+R.r(25,110):null,reply:R()<.5?R.pick(REPLIES):null,rd:R.r(2,9),dx:R.r(-18,18),dy:R.r(-18,18)});
+ const pM={c:.14,p:.07,d:.015}[sev],pS={c:.45,p:.65,d:.88}[sev];let apt=1;
+ for(let f=0;f<b.floors;f++)for(let k=0;k<b.pf;k++){const u={apt:apt++,floor:f,reg:R()<.08?0:R.int(1,5),miss:null,safe:null,hosp:null};
+  if(u.reg){if(R()<pM){u.miss=h.resT+R.r(0,50);if(R()<.3)u.hosp=u.miss+R.r(20,140)}else if(R()<pS)u.safe=h.resT+R.r(2,110)}h.units.push(u)}
+ const nm=R.int(sev=='d'?0:1,sev=='c'?4:3),T=[
+  ['Telegram · residents group','My parents live on floor {F} at {A}, apt {apt}. Their phones are off since the impact. Please check.','he'],
+  ['WhatsApp tipline','We hear knocking from under the rubble at {A}, back side near the parking.','he'],
+  ['104 hotline list','Family report: {n} residents of apt {apt} at {A} unreachable.','he'],
+  ['Municipal hotline 106','Elderly neighbour on floor {F} of {A} lives alone and uses a walker.','he'],
+  ['X · public post','Entrance {E} stairwell of {A} collapsed. People were going down to the shelter.','he'],
+  ['Facebook · public post','My brother is trapped with his son, floor {F} at {A}. He texted "we are under the stairs".','ar']];
+ const missU=h.units.filter(u=>u.miss&&u.reg);
+ for(let i=0;i<nm;i++){const tp=R.pick(T),u=missU.length?R.pick(missU):R.pick(h.units);
+  ev.msgs.push({id:ev.seq++,b:id,t:at+R.r(4,150),ch:tp[0],lang:tp[2],floor:u.floor,apt:u.apt,srcs:R()<.35?2:1,fake:false,
+   txt:tp[1].replace('{F}',fl(u.floor)).replace('{A}',b.addr).replace('{apt}',u.apt).replace('{n}',u.reg||2).replace('{E}',b.ent)})}
+ ev.H[id]=h;ev.hits.push(h);return h}
+function planOrbits(ev){
+ const q=ev.hits.filter(h=>h.os==null).sort((a,b)=>SEV[b.sev].w-SEV[a.sev].w||ev.city.bl[b.id].floors-ev.city.bl[a.id].floors);
+ for(const h of q){const d=ev.drones.reduce((a,b)=>a.free<=b.free?a:b);h.os=Math.max(d.free,h.at+6);h.oe=h.os+6;h.mr=h.oe+35;h.dr=d.id;d.free=h.oe+1;d.tasks.push({b:h.id,s:h.os,e:h.oe});
+  for(const v of h.dev)v.t3=h.oe+h.R.r(0,3)}}
+function addFakes(ev){const R=rng(ev.loc.seed+77),f=ev.fb;
+ const cand=ev.city.bl.filter(b=>!ev.H[b.id]&&b.cx>f.x0&&b.cx<f.x1&&b.cy>f.y0&&b.cy<f.y1);
+ for(let i=0;i<Math.min(3,cand.length);i++){const b=R.pick(cand);ev.msgs.push({id:ev.seq++,b:b.id,t:R.r(8,70),ch:'X · 7 near-identical accounts',lang:'he',floor:R.int(1,b.floors-1),srcs:1,fake:true,cov:covAt(ev,b.cx,b.cy,0),
+  txt:`URGENT, share!! 5 people trapped at ${b.addr}, floor ${R.int(1,b.floors-1)}, nobody is coming`})}}
+const pl=(n,w)=>`${n} ${w}${n==1?'':'s'}`;
+const fl=f=>f==0?'G':String(f);
+const alive=(d,t)=>!d.dead||d.dead>t;
+const loc3=(d,t)=>d.t3!=null&&t>=d.t3&&alive(d,d.t3);
+function msgStatus(ev,m,t){if(m.fake)return t>=m.cov?['flagged','Flagged: drone shows no damage; text cluster']:['reported','Reported'];
+ if(ev.ver[m.id])return['verified','Field-verified'];const h=ev.H[m.b];
+ if(h&&h.dev.some(d=>loc3(d,t)&&d.floor==m.floor))return['supported','Supported: phone located on floor '+fl(m.floor)];
+ if(h&&t>=h.cov)return['supported','Supported: drone confirms damage'];if(m.srcs>1)return['supported','Supported: 2 independent sources'];return['reported','Reported']}
+function msgsAt(ev,t,bid){const out=ev.msgs.filter(m=>m.t<=t&&(bid==null||m.b==bid));
+ for(const k in ev.sms){const s=ev.sms[k],[b,i]=k.split('-').map(Number),d=ev.H[b].dev[i];if(d.reply&&alive(d,s+.5)&&t>=s+d.rd&&(bid==null||bid==b))
+  out.push({id:'s'+k,b,t:s+d.rd,ch:'SMS reply via cellular locator',floor:d.floor,srcs:1,sms:true,txt:d.reply.replace('{F}',fl(d.floor))})}
+ return out.sort((a,b)=>b.t-a.t)}
+function resStat(h,u,t){if(t<h.resT)return null;if(u.hosp&&t>=u.hosp)return'Located — hospital';if(u.safe&&t>=u.safe)return'Located — safe';if(u.miss&&t>=u.miss)return'Reported missing';return'Unknown'}
+function resSum(h,t){const s={reg:0,loc:0,miss:0,unk:0};for(const u of h.units){s.reg+=u.reg;const st=resStat(h,u,t);if(!st)continue;if(st.startsWith('Located'))s.loc+=u.reg;else if(st=='Reported missing')s.miss+=u.reg;else s.unk+=u.reg}return s}
+function score(ev,h,t){let v=SEV[h.sev].w*.9;for(const d of h.dev){if(loc3(d,t))v+=alive(d,t)?7:4;else if(t>=d.t2)v+=2.5}
+ for(const m of msgsAt(ev,t,h.id)){const s=m.sms?'supported':msgStatus(ev,m,t)[0];v+=m.sms?9:s=='verified'?7:s=='supported'?4:1}
+ v+=resSum(h,t).miss*1.6;return Math.min(99,Math.round(v))}
+const ORT=[[68,'v1'],[128,'v2 · refresh by team drone'],[188,'v3 · refresh by team drone'],[248,'v4']];
+const orthoV=t=>{let v=null;for(const o of ORT)if(t>=o[0])v=o;return v};
+function covRects(ev,t){const f=ev.fb;if(t>=128)return[[-60,-60,ev.city.W+120,ev.city.H+120]];if(t<f.T0)return[];if(t>=f.T1)return[[f.x0,f.y0,f.x1-f.x0,f.y1-f.y0]];
+ const p=(t-f.T0)/(f.T1-f.T0)*f.n,k=Math.floor(p),q=p-k,r=[],hh=f.y1-f.y0;for(let j=0;j<k;j++)r.push([f.x0+j*f.sw,f.y0,f.sw,hh]);
+ if(k<f.n)r.push(k%2==0?[f.x0+k*f.sw,f.y0,f.sw,q*hh]:[f.x0+k*f.sw,f.y1-q*hh,f.sw,q*hh]);return r}
+function dronePos(ev,t){const out=[],f=ev.fb,C=ev.city;
+ if(t>=f.T0&&t<f.T1){const p=(t-f.T0)/(f.T1-f.T0)*f.n,k=Math.min(f.n-1,Math.floor(p)),q=p-k;out.push({id:'M-1',x:f.x0+(k+.5)*f.sw,y:k%2==0?f.y0+q*(f.y1-f.y0):f.y1-q*(f.y1-f.y0),a:'map'})}
+ for(const r of[120,180,240])if(t>=r&&t<r+8){const g=(t-r)/8*8,k=Math.min(7,Math.floor(g)),q=g-k,sw=C.W/8;out.push({id:'T-3',x:(k+.5)*sw,y:k%2==0?q*C.H:C.H-q*C.H,a:'map'})}
+ for(const d of ev.drones)for(const k of d.tasks)if(t>=k.s&&t<k.e){const b=C.bl[k.b],r=Math.max(b.w,b.h)*.85+10,a=(t-k.s)*4.2;out.push({id:d.id,x:b.cx+Math.cos(a)*r,y:b.cy+Math.sin(a)*r,a:'orb',b:k.b,r})}
+ return out}
+
+/* ---------- map drawing ---------- */
+function worldSVG(ev,city,pid,bb,o={}){
+ const R=rng(city.seed*3+7),ins=(x,y,w,h,m=30)=>x+w>bb[0]-m&&x<bb[2]+m&&y+h>bb[1]-m&&y<bb[3]+m;
+ const B=city.bl.filter(b=>ins(b.x,b.y,b.w,b.h)),BK=city.blocks.filter(b=>ins(b.x,b.y,b.w,b.h,0));
+ const H=ev?ev.H:{};let base=`<rect x="-80" y="-80" width="${city.W+160}" height="${city.H+160}" fill="#8b877b"/><rect x="-80" y="-80" width="${city.W+160}" height="${city.H+160}" filter="url(#${pid}-n)"/>`;
+ for(const b of city.blocks){const rr=rng(Math.round(b.x*7+b.y*13));
+  if(b.park){base+=`<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="#566f40" rx="3"/>`;if(ins(b.x,b.y,b.w,b.h,0))for(let i=0;i<40;i++)base+=`<circle cx="${(b.x+rr()*b.w).toFixed(1)}" cy="${(b.y+rr()*b.h).toFixed(1)}" r="${rr.r(4,9).toFixed(1)}" fill="${rr()<.5?'#3f5a30':'#4a6838'}" stroke="#2c3f22" stroke-width=".8"/>`;continue}
+  base+=`<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="#a39e91" rx="2"/><rect x="${b.x+5}" y="${b.y+5}" width="${b.w-10}" height="${b.h-10}" fill="#8e8a7d"/>`;
+  if(ins(b.x,b.y,b.w,b.h,0))for(let s=b.x+10;s<b.x+b.w-6;s+=30){if(rr()<.55)base+=`<circle cx="${s}" cy="${b.y+3}" r="${rr.r(3.5,6).toFixed(1)}" fill="#40592f" stroke="#2b3c20" stroke-width=".8"/>`;if(rr()<.55)base+=`<circle cx="${s+12}" cy="${b.y+b.h-3}" r="${rr.r(3.5,6).toFixed(1)}" fill="#40592f" stroke="#2b3c20" stroke-width=".8"/>`}}
+ for(const s of city.streets){if(s.d=='v')base+=`<rect x="${s.x-s.w/2}" y="-80" width="${s.w}" height="${city.H+160}" fill="#3a3c3e"/>`+(s.w>20?`<line x1="${s.x}" y1="-80" x2="${s.x}" y2="${city.H+80}" stroke="#d9d3c0" stroke-width=".8" stroke-dasharray="8 8" opacity=".7"/>`:'');
+  else base+=`<rect x="-80" y="${s.y-s.w/2}" width="${city.W+160}" height="${s.w}" fill="#3a3c3e"/>`+(s.w>20?`<line x1="-80" y1="${s.y}" x2="${city.W+80}" y2="${s.y}" stroke="#d9d3c0" stroke-width=".8" stroke-dasharray="8 8" opacity=".7"/>`:'');
+  const cr=rng(Math.round((s.x||0)*3+(s.y||0)*5+11));for(let p=-40;p<(s.d=='v'?city.H:city.W)+40;p+=34){if(cr()<.33){const c=cr.pick(['#d8d8d8','#2a2d33','#8a1d1d','#5b6e86','#c9c3b5','#1f3a5c']),off=(cr()<.5?-1:1)*s.w*.25;
+   base+=s.d=='v'?`<rect x="${s.x+off-2.5}" y="${p}" width="5" height="9" rx="1.2" fill="${c}"/>`:`<rect x="${p}" y="${s.y+off-2.5}" width="9" height="5" rx="1.2" fill="${c}"/>`}}}
+ for(const b of B){const sh=b.floors*1.3;base+=`<rect x="${b.x+sh*.7}" y="${b.y+sh}" width="${b.w}" height="${b.h}" fill="#000" opacity=".38"/>`}
+ for(const b of B){const r=rng(b.id*17+3);base+=`<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="${b.roof}" stroke="#00000040" stroke-width=".8"/><rect x="${b.x+2}" y="${b.y+2}" width="${b.w-4}" height="${b.h-4}" fill="none" stroke="#ffffff30" stroke-width=".8"/>`;
+  for(let k=0;k<b.tanks;k++){const px=b.x+5+(k%4)*Math.min(10,(b.w-10)/4),py=b.y+5+Math.floor(k/4)*11;base+=`<rect x="${px.toFixed(1)}" y="${py}" width="6" height="4" fill="#2b3a4f"/><circle cx="${(px+3).toFixed(1)}" cy="${py+6.5}" r="1.7" fill="#ecebe6"/>`}
+  for(let k=0;k<2;k++)base+=`<rect x="${(b.x+b.w*r.r(.2,.8)).toFixed(1)}" y="${(b.y+b.h*r.r(.55,.85)).toFixed(1)}" width="3.5" height="2.5" fill="#d0d0d0"/>`}
+ let now=`<use href="#${pid}-base"/><rect x="-80" y="-80" width="${city.W+160}" height="${city.H+160}" fill="#c2ad8a" opacity=".1"/>`;
+ if(ev){now+=`<circle cx="${ev.cx}" cy="${ev.cy}" r="${Math.max(ev.fb.x1-ev.fb.x0,ev.fb.y1-ev.fb.y0)*.55}" fill="url(#${pid}-dust)"/>`;
+  let rub='',top='';
+  for(const h of ev.hits){const b=city.bl[h.id];if(!ins(b.x,b.y,b.w,b.h))continue;const r=rng(b.id*101+9);
+   if(h.sev=='c'){const e=r.int(5,10),pts=[];for(let i=0;i<16;i++){const a=i/16*Math.PI*2,rx=b.w/2+e+r.r(-4,6),ry=b.h/2+e+r.r(-4,6);pts.push([b.cx+Math.cos(a)*rx,b.cy+Math.sin(a)*ry])}
+    rub+=`<path d="M${pts.map(p=>p.map(v=>v.toFixed(1)).join(',')).join('L')}Z" fill="#8f877a"/>`;
+    for(let i=0;i<40;i++)top+=`<rect x="${(b.x-8+r()*(b.w+16)).toFixed(1)}" y="${(b.y-8+r()*(b.h+16)).toFixed(1)}" width="${r.r(1,3.5).toFixed(1)}" height="${r.r(1,2.5).toFixed(1)}" fill="${r.pick(['#5f584f','#c9c1b2','#3b3631','#a39886'])}"/>`;
+    top+=`<ellipse cx="${(b.cx+r.r(-6,6)).toFixed(1)}" cy="${(b.cy+r.r(-6,6)).toFixed(1)}" rx="${b.w*.25}" ry="${b.h*.2}" fill="#1b1612" opacity=".55"/>`}
+   else if(h.sev=='p'){const side=r()<.5,hx=side?b.x+b.w*.45:b.x,ww=b.w*.55+6;rub+=`<rect x="${hx-3}" y="${b.y-5}" width="${ww}" height="${b.h+10}" rx="6" fill="#958c7e"/>`;
+    top+=`<path d="M${b.x+b.w*.2},${b.y+3}L${b.x+b.w*.35},${b.y+b.h*.5}L${b.x+b.w*.25},${b.y+b.h-3}" stroke="#2a2522" stroke-width="1.2" fill="none"/>`;
+    for(let i=0;i<20;i++)top+=`<rect x="${(hx+r()*ww).toFixed(1)}" y="${(b.y-6+r()*(b.h+12)).toFixed(1)}" width="2" height="2" fill="#4c463f"/>`}
+   else{for(let i=0;i<3;i++)top+=`<circle cx="${(b.x+r()*b.w).toFixed(1)}" cy="${(b.y+r()*b.h).toFixed(1)}" r="${r.r(3,7).toFixed(1)}" fill="#1e1914" opacity=".55"/>`;
+    for(let i=0;i<14;i++)top+=`<rect x="${(b.x-6+r()*(b.w+12)).toFixed(1)}" y="${(b.y-6+r()*(b.h+12)).toFixed(1)}" width="2" height="1.6" fill="#5a534b"/>`}}
+  now+=`<g filter="url(#${pid}-rb)">${rub}</g>${top}`;
+  const vr=rng(ev.loc.seed+5),vs=city.streets.filter(s=>s.d=='v'?Math.abs(s.x-ev.cx)<260:Math.abs(s.y-ev.cy)<200);
+  for(let i=0;i<11&&vs.length;i++){const s=vr.pick(vs),c=vr.pick(['#c8231d','#f3f3f3','#c8231d','#2b4fa3','#e9b200']),p=s.d=='v'?ev.cy+vr.r(-160,160):ev.cx+vr.r(-200,200);
+   now+=s.d=='v'?`<rect x="${s.x-3}" y="${p.toFixed(1)}" width="6" height="14" rx="1" fill="${c}" stroke="#000" stroke-width=".4"/>`:`<rect x="${p.toFixed(1)}" y="${s.y-3}" width="14" height="6" rx="1" fill="${c}" stroke="#000" stroke-width=".4"/>`}}
+ let vec=`<rect x="-80" y="-80" width="${city.W+160}" height="${city.H+160}" fill="#1a1f23"/>`;
+ for(const b of city.blocks)vec+=`<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="${b.park?'#1f3024':'#242b30'}" rx="2"/>`;
+ for(const s of city.streets)vec+=s.d=='v'?`<rect x="${s.x-s.w/2}" y="-80" width="${s.w}" height="${city.H+160}" fill="#323b42"/>`:`<rect x="-80" y="${s.y-s.w/2}" width="${city.W+160}" height="${s.w}" fill="#323b42"/>`;
+ for(const b of B)vec+=`<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="#2f393f" stroke="#55626b" stroke-width=".8"/><text x="${b.cx}" y="${b.cy+3}" font-size="8" text-anchor="middle" fill="#8e9aa2">${b.floors}F</text>`;
+ let lab='';for(const s of city.streets){const fs=o.big?7:10;if(s.d=='h')for(let x=bb[0]+60;x<bb[2];x+=Math.max(260,(bb[2]-bb[0])/3))lab+=`<text x="${x}" y="${s.y+3.5}" font-size="${fs}" fill="#f4f1ea" stroke="#000" stroke-width="2.4" paint-order="stroke" opacity=".85">${esc(s.name)}</text>`;
+  else for(let y=bb[1]+80;y<bb[3];y+=Math.max(240,(bb[3]-bb[1])/2.5))lab+=`<text transform="translate(${s.x+3.5},${y}) rotate(-90)" font-size="${fs}" fill="#f4f1ea" stroke="#000" stroke-width="2.4" paint-order="stroke" opacity=".85">${esc(s.name)}</text>`}
+ let fp='';for(const b of B)fp+=`<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="none" stroke="#45c4ea" stroke-width=".9" opacity=".8"/><text x="${b.cx}" y="${b.cy+3}" font-size="8" text-anchor="middle" fill="#bdeeff" stroke="#000" stroke-width="2" paint-order="stroke">${b.floors}F</text>`;
+ let ut='';for(const s of city.streets){if(s.d=='v'){ut+=`<line x1="${s.x+s.w/2+2}" y1="-80" x2="${s.x+s.w/2+2}" y2="${city.H+80}" stroke="#4aa3ff" stroke-width="1.4" stroke-dasharray="6 3"/><line x1="${s.x-s.w/2-2}" y1="-80" x2="${s.x-s.w/2-2}" y2="${city.H+80}" stroke="#ff9a3c" stroke-width="1.4" stroke-dasharray="2 3"/>`}
+  else ut+=`<line x1="-80" y1="${s.y+s.w/2+2}" x2="${city.W+80}" y2="${s.y+s.w/2+2}" stroke="#4aa3ff" stroke-width="1.4" stroke-dasharray="6 3"/><line x1="-80" y1="${s.y-s.w/2-2}" x2="${city.W+80}" y2="${s.y-s.w/2-2}" stroke="#f2d14e" stroke-width="1.4" stroke-dasharray="10 4"/>`}
+ if(ev)for(const h of ev.hits){const b=city.bl[h.id];ut+=`<g transform="translate(${b.x-4},${b.y+b.h+4})"><rect x="-4" y="-4" width="8" height="8" fill="#ff9a3c" stroke="#000"/><text x="7" y="3" font-size="7" fill="#ffd2a8" stroke="#000" stroke-width="1.6" paint-order="stroke">gas valve</text></g>`}
+ const poly=ev&&ev.poly&&ev.poly.length>2?`<path d="M${ev.poly.map(p=>p.join(',')).join('L')}Z" fill="#ff6a2b12" stroke="#ff6a2b" stroke-width="1.6" stroke-dasharray="7 4"/>`:'';
+ let dmg='';if(ev)for(const h of ev.hits){const b=city.bl[h.id];dmg+=`<rect x="${b.x-2}" y="${b.y-2}" width="${b.w+4}" height="${b.h+4}" fill="none" stroke="${SEV[h.sev].col}" stroke-width="2"/>`}
+ return `<defs><filter id="${pid}-n" x="0" y="0" width="1" height="1"><feTurbulence type="fractalNoise" baseFrequency=".75" numOctaves="2" seed="7"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  .75 0 0 0 -.22"/></filter>
+  <filter id="${pid}-rb" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency=".18" numOctaves="2" seed="4" result="t"/><feDisplacementMap in="SourceGraphic" in2="t" scale="9" xChannelSelector="R" yChannelSelector="G"/></filter>
+  <radialGradient id="${pid}-dust"><stop offset="0" stop-color="#d8c8aa" stop-opacity=".55"/><stop offset=".6" stop-color="#cbb894" stop-opacity=".2"/><stop offset="1" stop-color="#cbb894" stop-opacity="0"/></radialGradient>
+  <clipPath id="${pid}-cov"></clipPath><clipPath id="${pid}-sw"><rect id="${pid}-swr" x="-100" y="-100" width="2000" height="1200"/></clipPath><g id="${pid}-base">${base}</g></defs>
+  <g class="L-vec" style="display:none">${vec}</g><use class="L-pre" href="#${pid}-base"/><g class="L-now" clip-path="url(#${pid}-cov)"><g clip-path="url(#${pid}-sw)">${now}</g></g>
+  <g class="L-fp" style="display:none">${fp}</g><g class="L-util" style="display:none">${ut}</g><g class="L-lab">${lab}</g><g class="L-poly">${poly}</g><g class="L-dmg">${dmg}</g><g class="dyn"></g>`}
+function setLayers(svg,m){const v=(c,s)=>{const e=svg.querySelector('.'+c);if(e)e.style.display=s?'':'none'};
+ for(const k in m)v('L-'+k,m[k])}
+function setCov(svg,pid,ev,t,swx){const cp=svg.querySelector('#'+pid+'-cov');if(cp){const h=covRects(ev,t).map(r=>`<rect x="${r[0]}" y="${r[1]}" width="${r[2]}" height="${r[3]}"/>`).join('');if(cp._h!==h){cp.innerHTML=h;cp._h=h}}
+ const sr=svg.querySelector('#'+pid+'-swr');if(sr){sr.setAttribute('x',swx==null?-100:swx);sr.setAttribute('width',swx==null?2000:2000)}}
+function dynSVG(ev,t,k,o){let s='';const C=ev.city;
+ if(o.cov&&t>=ev.fb.T0&&t<ev.fb.T1)for(const r of covRects(ev,t))s+=`<rect x="${r[0]}" y="${r[1]}" width="${r[2]}" height="${r[3]}" fill="none" stroke="#45c4ea" stroke-width="${k*1}" stroke-dasharray="${k*4} ${k*3}" opacity=".7"/>`;
+ if(o.osint)for(const m of msgsAt(ev,t)){const b=C.bl[m.b];if(o.only!=null&&m.b!=o.only)continue;const st=m.sms?'supported':msgStatus(ev,m,t)[0],c={reported:'#c7cdd2',supported:'#ff6a2b',verified:'#45c4ea',flagged:'#c0392b'}[st];
+  const r=rng(String(m.id).length*97+(typeof m.id=='number'?m.id:7)),x=b.x+b.w*r.r(.15,.85),y=b.y-2;
+  s+=`<g transform="translate(${x.toFixed(1)},${y.toFixed(1)}) scale(${k})"><path d="M0,0 L-5,-8 A6,6 0 1 1 5,-8 Z" fill="${c}" stroke="#000" stroke-width=".8"/>${st=='flagged'?'<path d="M-2.5,-12.5 L2.5,-7.5 M2.5,-12.5 L-2.5,-7.5" stroke="#fff" stroke-width="1.4"/>':'<circle cx="0" cy="-10" r="2" fill="#111"/>'}</g>`}
+ if(o.imsi)for(const h of ev.hits){if(o.only!=null&&h.id!=o.only)continue;const b=C.bl[h.id];let n3=0;
+  for(const d of h.dev){if(t<d.t2)continue;const wx=b.x+d.fx*b.w,wy=b.y+d.fy*b.h,al=alive(d,t);
+   if(loc3(d,t)){n3++;s+=`<circle cx="${wx.toFixed(1)}" cy="${wy.toFixed(1)}" r="${(d.acc*2).toFixed(1)}" fill="#ff3fa422" stroke="#ff3fa4" stroke-width="${k*.8}"/><circle cx="${wx.toFixed(1)}" cy="${wy.toFixed(1)}" r="${k*3.2}" fill="${al?'#ff3fa4':'#7a3f5c'}" stroke="#fff" stroke-width="${k*.8}"/>`;
+    if(o.lbl)s+=`<text x="${(wx+k*5).toFixed(1)}" y="${(wy-k*4).toFixed(1)}" font-size="${k*10}" fill="#ffd0e8" stroke="#000" stroke-width="${k*2.2}" paint-order="stroke">P${d.k+1} · F${fl(d.floor)}</text>`}
+   else s+=`<circle cx="${(wx+d.dx).toFixed(1)}" cy="${(wy+d.dy).toFixed(1)}" r="40" fill="#ff3fa40d" stroke="#ff3fa4" stroke-width="${k*.9}" stroke-dasharray="${k*4} ${k*3}"/><circle cx="${(wx+d.dx).toFixed(1)}" cy="${(wy+d.dy).toFixed(1)}" r="${k*2}" fill="#ff3fa4"/>`}
+  if(o.badge){const n=h.dev.filter(d=>t>=d.t2).length;if(n)s+=`<g transform="translate(${b.x+b.w},${b.y}) scale(${k})"><rect x="-2" y="-9" width="${n3?30:20}" height="13" rx="6.5" fill="#ff3fa4"/><text x="3" y="1" font-size="9.5" font-weight="600" fill="#1a0010">${n3||''}${n3&&n>n3?'+':''}${n>n3?n-n3:''}</text></g>`}}
+ if(o.rank){const rk=[...ev.hits].sort((a,b)=>score(ev,b,t)-score(ev,a,t));rk.forEach((h,i)=>{const b=C.bl[h.id];s+=`<g transform="translate(${b.x},${b.y}) scale(${k})"><circle r="8" fill="${SEV[h.sev].col}" stroke="#000"/><text y="3.4" text-anchor="middle" font-size="9.5" font-weight="700" fill="#140600">${i+1}</text></g>`;
+  if(o.teams&&ev.team[h.id])s+=`<text transform="translate(${b.x},${b.y+b.h+k*11}) scale(${k})" font-size="9" fill="#e7eaec" stroke="#000" stroke-width="2.2" paint-order="stroke">${esc(ev.team[h.id])}</text>`})}
+ if(o.drone)for(const d of dronePos(ev,t)){if(d.a=='orb'&&(o.only==null||o.only==d.b))s+=`<circle cx="${C.bl[d.b].cx}" cy="${C.bl[d.b].cy}" r="${d.r}" fill="none" stroke="#45c4ea" stroke-width="${k}" stroke-dasharray="${k*3} ${k*3}" opacity=".7"/>`;
+  s+=`<g transform="translate(${d.x.toFixed(1)},${d.y.toFixed(1)}) scale(${k})"><circle r="9" fill="#45c4ea33"/><path d="M0,-7 L6,5 L0,2 L-6,5Z" fill="#45c4ea" stroke="#001820"/><text x="9" y="-6" font-size="9.5" font-weight="600" fill="#bdeeff" stroke="#000" stroke-width="2.2" paint-order="stroke">${d.id}</text></g>`}
+ if(o.swx!=null)s+=`<line x1="${o.swx}" y1="-100" x2="${o.swx}" y2="1000" stroke="#fff" stroke-width="${k*2}"/><g transform="translate(${o.swx},${o.swy}) scale(${k})"><circle r="13" fill="#fff"/><path d="M-4,-5 L-9,0 L-4,5 M4,-5 L9,0 L4,5" stroke="#111" stroke-width="2" fill="none"/></g>`;
+ return s}
+function svgPt(svg,e){const p=svg.createSVGPoint();p.x=e.clientX;p.y=e.clientY;return p.matrixTransform(svg.getScreenCTM().inverse())}
+const bAt=(city,p)=>city.bl.find(b=>p.x>=b.x-2&&p.x<=b.x+b.w+2&&p.y>=b.y-2&&p.y<=b.y+b.h+2);
+function fitVB(svg,bb){const W=svg.clientWidth||800,H=svg.clientHeight||600;let w=bb[2]-bb[0],h=bb[3]-bb[1];if(w/h>W/H)h=w*H/W;else w=h*W/H;const cx=(bb[0]+bb[2])/2,cy=(bb[1]+bb[3])/2;return[cx-w/2,cy-h/2,w,h]}
+function panZoom(svg,get,set,onClick,opt={}){let d=null;
+ svg.addEventListener('wheel',e=>{e.preventDefault();const vb=get(),p=svgPt(svg,e),f=Math.exp(e.deltaY*.0012),w=clamp(vb[2]*f,120,2400),r=w/vb[2];set([p.x-(p.x-vb[0])*r,p.y-(p.y-vb[1])*r,w,vb[3]*r])},{passive:false});
+ svg.addEventListener('pointerdown',e=>{if(e.button)return;d={x:e.clientX,y:e.clientY,vb:get(),m:false,sw:opt.swipe&&opt.swipe(e)};svg.setPointerCapture(e.pointerId)});
+ svg.addEventListener('pointermove',e=>{if(opt.move)opt.move(e);if(!d)return;const dx=e.clientX-d.x,dy=e.clientY-d.y;if(Math.abs(dx)+Math.abs(dy)>4)d.m=true;if(!d.m)return;
+  if(d.sw){opt.swdrag(svgPt(svg,e));return}const s=d.vb[2]/svg.clientWidth;set([d.vb[0]-dx*s,d.vb[1]-dy*s,d.vb[2],d.vb[3]])});
+ svg.addEventListener('pointerup',e=>{if(d&&!d.m&&onClick)onClick(e);d=null});
+ svg.addEventListener('pointerleave',()=>{if(opt.leave)opt.leave()})}
+
+/* ---------- 3D ---------- */
+function cam(cv,draw){const c={yaw:.75,pitch:.62,zoom:1,dirty:true,cv,draw};let d=null;
+ cv.addEventListener('pointerdown',e=>{d={x:e.clientX,y:e.clientY};cv.setPointerCapture(e.pointerId)});
+ cv.addEventListener('pointermove',e=>{if(!d)return;c.yaw+=(e.clientX-d.x)*.01;c.pitch=clamp(c.pitch+(e.clientY-d.y)*.01,.08,1.5);d={x:e.clientX,y:e.clientY};c.dirty=true});
+ cv.addEventListener('pointerup',()=>d=null);
+ cv.addEventListener('wheel',e=>{e.preventDefault();c.zoom=clamp(c.zoom*Math.exp(-e.deltaY*.0012),.4,5);c.dirty=true},{passive:false});
+ c.render=()=>{const r=cv.getBoundingClientRect();if(!r.width)return;const dp=devicePixelRatio||1;if(cv.width!=Math.round(r.width*dp)){cv.width=Math.round(r.width*dp);cv.height=Math.round(r.height*dp)}
+  const x=cv.getContext('2d');x.setTransform(dp,0,0,dp,0,0);x.clearRect(0,0,r.width,r.height);draw(x,r.width,r.height,c);c.dirty=false};return c}
+function P(c,X,Y,Z,W,H,s){const ca=Math.cos(c.yaw),sa=Math.sin(c.yaw),x=X*ca-Y*sa,y=X*sa+Y*ca,cp=Math.cos(c.pitch),sp=Math.sin(c.pitch);return[W/2+x*s,H*.6-(y*sp+Z*cp)*s,y*cp-Z*sp]}
+function cmodel(b,h){const R=rng(b.id*977+5),F=b.floors,sl=[];for(let i=0;i<=F+1;i++)sl.push({tx:R.r(-1,1),ty:R.r(-1,1),dz:R.r(0,.4),ox:R.r(-1.4,1.4),oy:R.r(-1.4,1.4)});
+ const hinge=R.r(.35,.55),side=R()<.5;
+ return{z:(i,u,v)=>{const zi=i*3,s=sl[i];if(h.sev=='c')return i==0?0:Math.max(0,Math.min(zi,i*.55+s.dz+(s.tx*(u-.5)+s.ty*(v-.5))*1.6));
+  if(h.sev=='p'){const uu=side?u:1-u;if(uu<hinge||i==0)return zi;const k=Math.min(1,(uu-hinge)/(1-hinge)*1.2);return zi-(zi-(i*.6+s.dz))*k}return zi},
+  off:(i)=>h.sev=='c'&&i>0?[sl[i].ox,sl[i].oy]:[0,0],side,hinge}}
+function genPts(b,h){const Wm=b.w*.5,Dm=b.h*.5,F=b.floors,M=cmodel(b,h),R=rng(b.id*31+h.sev.charCodeAt(0)),pts=[];
+ const nu=Math.max(4,Math.round(Wm/1.2)),nv=Math.max(4,Math.round(Dm/1.2)),broken=h.sev!='d';
+ const roofc=b.roof,fac=b.fac;
+ for(let i=1;i<=F;i++){if(i<F&&!broken)continue;const[ox,oy]=M.off(i);for(let a=0;a<=nu;a++)for(let c=0;c<=nv;c++){const u=a/nu,v=c/nv;
+  pts.push([(u-.5)*Wm+ox,(v-.5)*Dm+oy,M.z(i,u,v),i==F?roofc:'#8d877e'])}}
+ const per=[];const st=1;for(let s=0;s<Wm;s+=st)per.push([s/Wm,0,s]);for(let s=0;s<Dm;s+=st)per.push([1,s/Dm,Wm+s]);for(let s=0;s<Wm;s+=st)per.push([1-s/Wm,1,Wm+Dm+s]);for(let s=0;s<Dm;s+=st)per.push([0,1-s/Dm,2*Wm+Dm+s]);
+ for(let i=0;i<F;i++){const[o1x,o1y]=M.off(i),[o2x,o2y]=M.off(i+1);for(const[u,v,pp]of per)for(const s of[0,.25,.5,.75]){if(h.sev=='d'&&R()<.05)continue;
+  const z0=M.z(i,u,v),z1=M.z(i+1,u,v),z=z0+(z1-z0)*s,win=(s==.25||s==.5)&&(pp%3.2)>.9&&(pp%3.2)<2.3;
+  let col=win?'#3b4652':i==0?'#b9b0a0':fac;if(broken&&z1-z0<2.2)col=win?'#4a4640':'#9d9483';
+  pts.push([(u-.5)*Wm+o1x+(o2x-o1x)*s,(v-.5)*Dm+o1y+(o2y-o1y)*s,z,col])}}
+ const RB={c:900,p:380,d:90}[h.sev],rm=Math.max(Wm,Dm)/2+(h.sev=='c'?7:4);
+ for(let i=0;i<RB;i++){const a=R()*Math.PI*2,r=Math.sqrt(R())*rm;let x=Math.cos(a)*r,y=Math.sin(a)*r;if(h.sev=='p'){const u=x/Wm+.5;if(M.side?u<M.hinge:u>1-M.hinge)x=(M.side?1:-1)*Math.abs(x)}
+  pts.push([x,y,Math.max(0,(1-r/rm))*R()*(h.sev=='c'?F*.7+2:2.5),R.pick(['#8a8174','#9b9284','#6f675d','#b3a996','#5a544c'])])}
+ return{pts,M,Wm,Dm}}
+function draw3B(x,W,H,c){const ev=S.ev,b=ev&&ev.city.bl[S.bid],h=ev&&ev.H[S.bid];if(!b)return;if(!c.g||c.g.k!==b.id+h.sev){c.g=genPts(b,h);c.g.k=b.id+h.sev}
+ const g=c.g,s=Math.min(W,H)/(Math.max(g.Wm,g.Dm,b.floors*3)*1.9)*c.zoom,t=S.t;
+ const gr=Math.max(g.Wm,g.Dm)*.9+6;x.fillStyle='#1d2327';x.beginPath();[[-gr,-gr],[gr,-gr],[gr,gr],[-gr,gr]].forEach((p,i)=>{const q=P(c,p[0],p[1],0,W,H,s);i?x.lineTo(q[0],q[1]):x.moveTo(q[0],q[1])});x.fill();
+ x.strokeStyle='#2a3137';x.lineWidth=1;for(let k=-gr;k<=gr;k+=4){let a=P(c,k,-gr,0,W,H,s),e=P(c,k,gr,0,W,H,s);x.beginPath();x.moveTo(a[0],a[1]);x.lineTo(e[0],e[1]);x.stroke();a=P(c,-gr,k,0,W,H,s);e=P(c,gr,k,0,W,H,s);x.beginPath();x.moveTo(a[0],a[1]);x.lineTo(e[0],e[1]);x.stroke()}
+ const pr=g.pts.map(p=>{const q=P(c,p[0],p[1],p[2],W,H,s);q.push(p[3]);return q});pr.sort((a,b)=>b[2]-a[2]);const ps=Math.max(1.6,s*.95);
+ for(const q of pr){x.fillStyle=q[3];x.fillRect(q[0]-ps/2,q[1]-ps/2,ps,ps)}
+ x.font='600 12px IBM Plex Sans,sans-serif';
+ if(!S.x3)return;for(const d of h.dev){if(t<d.t2)continue;const X=(d.fx-.5)*g.Wm,Y=(d.fy-.5)*g.Dm;
+  if(loc3(d,t)){const[ox,oy]=g.M.off(d.floor),z=g.M.z(d.floor,d.fx,d.fy)+.8,q=P(c,X+ox,Y+oy,z,W,H,s),q0=P(c,X+ox,Y+oy,0,W,H,s);
+   x.setLineDash([3,3]);x.strokeStyle='#ff3fa4aa';x.beginPath();x.moveTo(q[0],q[1]);x.lineTo(q0[0],q0[1]);x.stroke();x.setLineDash([]);
+   const gl=x.createRadialGradient(q[0],q[1],0,q[0],q[1],d.acc*s+6);gl.addColorStop(0,'#ff3fa4cc');gl.addColorStop(1,'#ff3fa400');x.fillStyle=gl;x.beginPath();x.arc(q[0],q[1],d.acc*s+6,0,7);x.fill();
+   x.fillStyle=alive(d,t)?'#ff3fa4':'#8a4a6a';x.strokeStyle='#fff';x.beginPath();x.arc(q[0],q[1],5,0,7);x.fill();x.stroke();
+   const lb=`P${d.k+1} · F${fl(d.floor)} · now ${z.toFixed(1)} m · ±${d.acc.toFixed(1)} m`;x.lineWidth=3;x.strokeStyle='#000';x.strokeText(lb,q[0]+9,q[1]-7);x.fillStyle='#ffd6ea';x.fillText(lb,q[0]+9,q[1]-7);x.lineWidth=1}
+  else{const X2=X+d.dx*.5,Y2=Y+d.dy*.5,a=P(c,X2,Y2,0,W,H,s),e=P(c,X2,Y2,b.floors*3+4,W,H,s);x.strokeStyle='#ff3fa466';x.lineWidth=6;x.beginPath();x.moveTo(a[0],a[1]);x.lineTo(e[0],e[1]);x.stroke();x.lineWidth=1;
+   x.fillStyle='#ffc4e3';x.fillText(`P${d.k+1} · 2D fix ±20 m, height unknown`,e[0]+6,e[1])}}}
+function draw3A(x,W,H,c){const ev=S.ev;if(!ev)return;const C=ev.city,f=ev.fb,ox=ev.cx,oy=ev.cy,t=S.t,m=160;
+ const B=C.bl.filter(b=>b.cx>f.x0-m&&b.cx<f.x1+m&&b.cy>f.y0-m&&b.cy<f.y1+m),span=Math.max(f.x1-f.x0,f.y1-f.y0)*.5+m*.5,s=Math.min(W,H)/span*1.0*c.zoom;
+ const gr=span*.6;x.fillStyle='#1b2125';x.beginPath();[[-gr,-gr],[gr,-gr],[gr,gr],[-gr,gr]].forEach((p,i)=>{const q=P(c,p[0],p[1],0,W,H,s);i?x.lineTo(q[0],q[1]):x.moveTo(q[0],q[1])});x.fill();
+ for(const st of C.streets){let a,e;if(st.d=='v'){a=P(c,(st.x-ox)*.5,gr,0,W,H,s);e=P(c,(st.x-ox)*.5,-gr,0,W,H,s)}else{a=P(c,-gr,-(st.y-oy)*.5,0,W,H,s);e=P(c,gr,-(st.y-oy)*.5,0,W,H,s)}
+  if(st.d=='v'&&Math.abs(st.x-ox)*.5>gr||st.d=='h'&&Math.abs(st.y-oy)*.5>gr)continue;x.strokeStyle='#323a40';x.lineWidth=st.w*.5*s;x.beginPath();x.moveTo(a[0],a[1]);x.lineTo(e[0],e[1]);x.stroke()}
+ x.lineWidth=1;if(ev.poly&&ev.poly.length>2){x.strokeStyle='#ff6a2b';x.setLineDash([6,4]);x.beginPath();ev.poly.forEach((p,i)=>{const q=P(c,(p[0]-ox)*.5,-(p[1]-oy)*.5,0,W,H,s);i?x.lineTo(q[0],q[1]):x.moveTo(q[0],q[1])});x.closePath();x.stroke();x.setLineDash([])}
+ const ca=Math.cos(c.yaw),sa=Math.sin(c.yaw),faces=[];
+ const hex=(h,k)=>{const n=parseInt(h.slice(1),16);return`rgb(${Math.min(255,(n>>16)*k)|0},${Math.min(255,(n>>8&255)*k)|0},${Math.min(255,(n&255)*k)|0})`};
+ for(const b of B){const h=ev.H[b.id],x0=(b.x-ox)*.5,x1=(b.x+b.w-ox)*.5,y0=-(b.y-oy)*.5,y1=-(b.y+b.h-oy)*.5;
+  const z=h?(h.sev=='c'?2.4:h.sev=='p'?b.floors*3*.55:b.floors*3):b.floors*3,col=h?SEV[h.sev].col:'#7d878f';
+  const C4=[[x0,y0],[x1,y0],[x1,y1],[x0,y1]],N=[[0,1],[1,0],[0,-1],[-1,0]];
+  for(let i=0;i<4;i++){const n=N[i],ny=n[0]*sa+n[1]*ca;if(ny>=0)continue;const a=C4[i],e=C4[(i+1)%4],nx=n[0]*ca-n[1]*sa,lt=.5+.35*Math.max(0,-nx*.6-ny*.5);
+   const q=[P(c,a[0],a[1],0,W,H,s),P(c,e[0],e[1],0,W,H,s),P(c,e[0],e[1],z,W,H,s),P(c,a[0],a[1],z,W,H,s)];faces.push({q,d:(q[0][2]+q[1][2])/2,f:hex(col,lt*(h?.9:.75))})}
+  const q=C4.map(p=>P(c,p[0],p[1],z,W,H,s));faces.push({q,d:q.reduce((a,b)=>a+b[2],0)/4-.01,f:hex(col,h?1.05:.95),b:h?b:null})}
+ faces.sort((a,b)=>b.d-a.d);for(const fc of faces){x.fillStyle=fc.f;x.beginPath();fc.q.forEach((p,i)=>i?x.lineTo(p[0],p[1]):x.moveTo(p[0],p[1]));x.closePath();x.fill();x.strokeStyle='#0006';x.stroke()}
+ x.font='600 12px IBM Plex Sans,sans-serif';
+ for(const h of ev.hits){const b=C.bl[h.id],M=cmodel(b,h);for(const d of h.dev){if(!loc3(d,t))continue;const[o1,o2]=M.off(d.floor),q=P(c,(b.x+d.fx*b.w-ox)*.5+o1,-(b.y+d.fy*b.h-oy)*.5-o2,M.z(d.floor,d.fx,d.fy)+.8,W,H,s);
+  x.fillStyle='#ff3fa4';x.strokeStyle='#fff';x.beginPath();x.arc(q[0],q[1],4.5,0,7);x.fill();x.stroke()}}
+ const rk=[...ev.hits].sort((a,b)=>score(ev,b,t)-score(ev,a,t));rk.slice(0,8).forEach((h,i)=>{const b=C.bl[h.id],q=P(c,(b.cx-ox)*.5,-(b.cy-oy)*.5,b.floors*3+5,W,H,s);x.lineWidth=3;x.strokeStyle='#000';x.strokeText(`${i+1} · ${b.addr}`,q[0]-20,q[1]);x.fillStyle='#fff';x.fillText(`${i+1} · ${b.addr}`,q[0]-20,q[1]);x.lineWidth=1})}
+
+/* ---------- small drawings ---------- */
+function facade(b,w=400,ht=240,alt=false){const r=rng(b.id*53+(alt?9:1)),F=b.floors,fw=Math.min(w*.58,70+b.w*2.4),flh=Math.min(21,(ht-70)/F),bh=flh*F+6,x0=(w-fw)/2,gy=ht-36;
+ let s=`<defs><linearGradient id="sk${b.id}${alt?1:0}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${alt?'#7fb2de':'#9bbad3'}"/><stop offset="1" stop-color="${alt?'#d9e8f2':'#e8ecec'}"/></linearGradient></defs><rect width="${w}" height="${ht}" fill="url(#sk${b.id}${alt?1:0})"/>`;
+ const nb=(x,ww,hh,c)=>{s+=`<rect x="${x}" y="${gy-hh}" width="${ww}" height="${hh}" fill="${c}"/>`;for(let yy=gy-hh+8;yy<gy-14;yy+=18)for(let xx=x+6;xx<x+ww-10;xx+=18)s+=`<rect x="${xx}" y="${yy}" width="9" height="9" fill="#5d6a75" opacity=".8"/>`};
+ nb(-10,x0-4,r.int(70,150),'#c8bfb0');nb(x0+fw+4,w-x0-fw+10,r.int(60,150),'#d2cbbe');
+ s+=`<rect x="${x0}" y="${gy-bh}" width="${fw}" height="${bh}" fill="${b.fac}"/><rect x="${x0-3}" y="${gy-bh-4}" width="${fw+6}" height="5" fill="#a59c8c"/>`;
+ for(let k=0;k<Math.min(4,b.tanks);k++)s+=`<rect x="${x0+10+k*16}" y="${gy-bh-14}" width="12" height="8" fill="#2b3a4f" transform="skewX(-20)"/><rect x="${x0+12+k*16}" y="${gy-bh-20}" width="9" height="5" rx="2" fill="#ecebe6"/>`;
+ const cols=Math.max(3,Math.round(fw/26)),cw=fw/cols;
+ for(let f=0;f<F;f++){const y=gy-(f+1)*flh;for(let c=0;c<cols;c++){const x=x0+c*cw;if(f==0&&r()<.6){s+=`<rect x="${x+2}" y="${y+3}" width="${cw-4}" height="${flh-3}" fill="#2f3a44"/>`;continue}
+  s+=`<rect x="${x+cw*.22}" y="${y+flh*.2}" width="${cw*.56}" height="${flh*.5}" fill="${r()<.25?'#e8d9a8':'#4d5b67'}"/>`;if(c%2==1&&f>0)s+=`<rect x="${x+2}" y="${y+flh*.72}" width="${cw-4}" height="${flh*.26}" fill="#ffffff55" stroke="#776f62" stroke-width=".8"/>`}}
+ s+=`<rect x="${x0+fw/2-9}" y="${gy-flh+2}" width="18" height="${flh-2}" fill="#5a4636"/><text x="${x0+fw/2}" y="${gy-flh-2}" font-size="8" text-anchor="middle" fill="#333">${b.num}</text>`;
+ s+=`<rect y="${gy}" width="${w}" height="10" fill="#b2ab9e"/><rect y="${gy+10}" width="${w}" height="${ht-gy}" fill="#45484b"/><line x1="0" y1="${gy+24}" x2="${w}" y2="${gy+24}" stroke="#ddd" stroke-dasharray="14 10"/>`;
+ s+=`<rect x="${r.int(20,300)}" y="${gy+12}" width="44" height="13" rx="4" fill="${r.pick(['#8a1d1d','#d8d8d8','#1f3a5c'])}"/><circle cx="${r.int(30,370)}" cy="${gy-30}" r="${r.int(16,26)}" fill="#4a6838"/>`;return s}
+function planSVG(b,h,f,t){const W=380,Hh=250,sc=Math.min((W-80)/(b.w*.5),(Hh-80)/(b.h*.5)),pw=b.w*.5*sc,ph=b.h*.5*sc,ox=(W-pw)/2,oy=(Hh-ph)/2+4,ln='#a8def2';
+ let s=`<defs><pattern id="gp" width="12" height="12" patternUnits="userSpaceOnUse"><path d="M12 0H0V12" fill="none" stroke="#1f4558" stroke-width=".6"/></pattern><pattern id="ht" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line y2="5" stroke="#ff6a2b" stroke-width="1.2"/></pattern></defs><rect width="${W}" height="${Hh}" fill="#0f2a38"/><rect width="${W}" height="${Hh}" fill="url(#gp)"/>`;
+ const n1=Math.ceil(b.pf/2),n2=b.pf-n1,cor=ph*.16,uh=(ph-cor)/2,mm=b.shelter.startsWith('Safe');
+ s+=`<rect x="${ox}" y="${oy}" width="${pw}" height="${ph}" fill="none" stroke="${ln}" stroke-width="3"/>`;
+ const unit=(x,y,w,hh,apt)=>{s+=`<rect x="${x}" y="${y}" width="${w}" height="${hh}" fill="none" stroke="${ln}" stroke-width="1.2"/><text x="${x+w/2}" y="${y+hh/2+4}" font-size="11" text-anchor="middle" fill="${ln}">Apt ${apt}</text>`;
+  if(mm)s+=`<rect x="${x+3}" y="${y+3}" width="${Math.min(22,w*.3)}" height="${Math.min(16,hh*.35)}" fill="#a8def222" stroke="${ln}" stroke-width="1.6"/><text x="${x+5}" y="${y+13}" font-size="7" fill="${ln}">MMD</text>`};
+ for(let k=0;k<n1;k++)unit(ox+k*pw/n1,oy,pw/n1,uh,f*b.pf+k+1);for(let k=0;k<n2;k++)unit(ox+k*pw/Math.max(1,n2),oy+uh+cor,pw/Math.max(1,n2),uh,f*b.pf+n1+k+1);
+ const cw=pw*.16;s+=`<rect x="${ox+pw/2-cw/2}" y="${oy+uh-6}" width="${cw}" height="${cor+12}" fill="#0f2a38" stroke="${ln}" stroke-width="1.4"/>`;for(let i=1;i<6;i++)s+=`<line x1="${ox+pw/2-cw/2+i*cw/6}" y1="${oy+uh-4}" x2="${ox+pw/2-cw/2+i*cw/6}" y2="${oy+uh+cor+4}" stroke="${ln}" stroke-width=".7"/>`;
+ s+=`<text x="${ox+pw/2}" y="${oy+uh+cor+22}" font-size="8" text-anchor="middle" fill="${ln}">stairs · entrance ${b.ent}</text>`;
+ s+=`<line x1="${ox}" y1="${oy-12}" x2="${ox+pw}" y2="${oy-12}" stroke="${ln}" stroke-width=".8"/><text x="${ox+pw/2}" y="${oy-16}" font-size="10" text-anchor="middle" fill="${ln}">${(b.w*.5).toFixed(1)} m</text><text transform="translate(${ox-14},${oy+ph/2}) rotate(-90)" font-size="10" text-anchor="middle" fill="${ln}">${(b.h*.5).toFixed(1)} m</text>`;
+ s+=`<g transform="translate(${W-22},26)"><path d="M0,-12 L5,4 L0,0 L-5,4Z" fill="${ln}"/><text y="16" font-size="9" text-anchor="middle" fill="${ln}">N</text></g>`;
+ if(h.sev!='d'&&f>0){const M=cmodel(b,h),zz=M.z(f,.5,.5);if(zz<f*3-.5)s+=`<rect x="${ox}" y="${oy}" width="${h.sev=='c'?pw:pw*.5}" height="${ph}" ${h.sev=='p'&&!M.side?`transform="translate(${pw*.5},0)"`:''} fill="url(#ht)" opacity=".55"/><text x="${ox+6}" y="${oy+ph-6}" font-size="10" fill="#ffb38a">Slab displaced, now ≈${zz.toFixed(1)} m above ground</text>`}
+ for(const d of h.dev)if(d.floor==f&&loc3(d,t)){const x=ox+d.fx*pw,y=oy+d.fy*ph;s+=`<circle cx="${x}" cy="${y}" r="${d.acc*sc}" fill="#ff3fa425" stroke="#ff3fa4"/><circle cx="${x}" cy="${y}" r="4.5" fill="#ff3fa4" stroke="#fff"/><text x="${x+7}" y="${y-6}" font-size="10" fill="#ffd0e8">P${d.k+1}</text>`}
+ return s}
+
+/* ---------- UI helpers ---------- */
+const setH=(el,h)=>{if(el&&el._h!==h){el.innerHTML=h;el._h=h}};
+const chip=(cls,txt)=>`<span class="chip ${cls}">${txt}</span>`;
+const st=(t,ready,lbl='Ready',pend='Pending',ld=null)=>ready==null?chip('',pend):t>=ready?chip('ok',lbl):ld!=null&&t>=ld?chip('ld','Loading'):chip('',pend);
+const clockStr=t=>{const d=new Date(S.ev.date.getTime()+t*60000);return `${pad(d.getHours())}:${pad(d.getMinutes())} · ${d.getDate()} ${d.toLocaleString('en',{month:'short'})}`};
+function waitBox(el,show,title,sub,p){if(!show){setH(el,'');return}setH(el,`<div class="wait"><b>${title}</b><span class="sm mu">${sub}</span>${p!=null?`<div class="prog"><i style="width:${Math.round(p*100)}%"></i></div>`:''}</div>`)}
+
+/* ---------- wizard ---------- */
+$('#etype').innerHTML=TYPES.map((t,i)=>`<button data-i="${i}" class="${i==0?'on':''}">${t}</button>`).join('');
+$('#etype').onclick=e=>{const b=e.target.closest('button');if(!b)return;S.w.type=+b.dataset.i;[...$('#etype').children].forEach(x=>x.classList.toggle('on',x==b))};
+function renderSugg(){const q=$('#qloc').value.trim().toLowerCase(),L=LOCS.filter(l=>!q||(l.name+' '+l.h.join(' ')+' '+l.v.join(' ')).toLowerCase().includes(q.split(',')[0].trim()));
+ $('#sugg').innerHTML=(L.length?L:LOCS).map(l=>`<button data-l="${l.id}" class="${S.w.loc==l?'on':''}"><span>${l.name}</span><span class="mu sm">${l.cc=='IL'?'Israel':'Türkiye'}</span></button>`).join('')+(L.length?'':`<div class="sm mu">No offline pack for "${esc(q)}" yet. Closest packs shown.</div>`)}
+function pickLoc(l){S.w.loc=l;S.w.city=genCity(l);S.w.sel.clear();S.w.poly=[];S.w.closed=false;const s=SRC[l.cc];
+ $('#esrc').innerHTML=s.base.map((x,i)=>`<option value="${i}">${x}</option>`).join('');$('#ebsrc').innerHTML=s.b.map((x,i)=>`<option value="${i}">${x}</option>`).join('');
+ $('#loccard').innerHTML=`<div><span class="sm mu">Selected</span><b>${l.name}</b></div><div><span class="sm mu">Centre</span><b>${l.ll}</b></div><div><span class="sm mu">Area loaded</span><b>600 × 400 m · ${S.w.city.bl.length} buildings</b></div><div><span class="sm mu">Offline pack (L1 to L4)</span><b>1.24 GB · ready on field kit</b></div>`;
+ $('#bto2').disabled=false;renderSugg()}
+$('#qloc').oninput=renderSugg;$('#sugg').onclick=e=>{const b=e.target.closest('button');if(b)pickLoc(LOCS.find(l=>l.id==b.dataset.l))};
+renderSugg();$('#loccard').innerHTML='<div class="sm mu">Pick a location to see the offline pack for it.</div>';
+function wstep(n){S.w.step=n;['wz1','wz2','wz3'].forEach((id,i)=>$('#'+id).hidden=i+1!=n);[...$('#steps').children].forEach(s=>{s.classList.toggle('on',+s.dataset.s==n);s.classList.toggle('done',+s.dataset.s<n)});
+ if(n==2)initWmap();if(n==3)renderFiles()}
+$('#bnew').onclick=()=>{location.hash='command';wstep(1);$('#qloc').focus()};
+$('#bto2').onclick=()=>wstep(2);$('#bback1').onclick=()=>wstep(1);
+function initWmap(){const svg=$('#wmap'),C=S.w.city;svg.innerHTML=worldSVG(null,C,'w',[0,0,C.W,C.H]);requestAnimationFrame(()=>{S.w.vb=fitVB(svg,[0,0,C.W,C.H]);svg.setAttribute('viewBox',S.w.vb.join(' '));wdraw()});
+ $('#wsrc').textContent=`${SRC[S.w.loc.cc].base[$('#esrc').value]} · ${SRC[S.w.loc.cc].b[$('#ebsrc').value]}`;setWmode(S.w.mode);wdraw()}
+function setWmode(m){S.w.mode=m;[...$('#wmode').children].forEach(b=>b.classList.toggle('on',b.dataset.m==m));setLayers($('#wmap'),{vec:m=='gis',pre:m=='pre',now:false,fp:m=='pre',dmg:false,poly:false,util:false})}
+$('#wmode').onclick=e=>{const b=e.target.closest('button');if(b)setWmode(b.dataset.m)};
+$('#wtool').onclick=e=>{const b=e.target.closest('button');if(!b)return;S.w.tool=b.dataset.t;[...$('#wtool').children].forEach(x=>x.classList.toggle('on',x==b));if(S.w.tool=='poly'&&S.w.closed){S.w.poly=[];S.w.closed=false}wdraw()};
+$('#wclear').onclick=()=>{S.w.sel.clear();S.w.poly=[];S.w.closed=false;wdraw()};
+$('#wclose').onclick=()=>closePoly();
+function closePoly(){const w=S.w;if(w.poly.length<3)return;w.closed=true;const C=w.city,cx=w.poly.reduce((a,p)=>a+p[0],0)/w.poly.length,cy=w.poly.reduce((a,p)=>a+p[1],0)/w.poly.length,md=Math.max(...w.poly.map(p=>Math.hypot(p[0]-cx,p[1]-cy))),R=rng(C.seed+w.poly.length);
+ for(const b of C.bl){const pts=[[b.cx,b.cy],[b.x,b.y],[b.x+b.w,b.y],[b.x,b.y+b.h],[b.x+b.w,b.y+b.h]];if(pts.some(p=>inPoly(p,w.poly))){const d=Math.hypot(b.cx-cx,b.cy-cy)/md+R.r(-.15,.15);w.sel.set(b.id,d<.38?'c':d<.7?'p':'d')}}wdraw()}
+function wdraw(){const w=S.w,svg=$('#wmap'),C=w.city;if(!C)return;const k=w.vb?w.vb[2]/(svg.clientWidth||800):1;let s='';
+ for(const[id,sv] of w.sel){const b=C.bl[id];s+=`<rect x="${b.x-2}" y="${b.y-2}" width="${b.w+4}" height="${b.h+4}" fill="${SEV[sv].col}44" stroke="${SEV[sv].col}" stroke-width="${2.2*k}"/>`}
+ if(w.hover!=null&&!w.sel.has(w.hover)){const b=C.bl[w.hover];s+=`<rect x="${b.x-2}" y="${b.y-2}" width="${b.w+4}" height="${b.h+4}" fill="#ffffff22" stroke="#fff" stroke-width="${1.5*k}"/>`}
+ if(w.poly.length){const p=w.poly.map(p=>p.join(',')).join(' ');s+=w.closed?`<polygon points="${p}" fill="#ff6a2b18" stroke="#ff6a2b" stroke-width="${2*k}" stroke-dasharray="${7*k} ${4*k}"/>`:`<polyline points="${p}${w.cur?' '+w.cur.x+','+w.cur.y:''}" fill="none" stroke="#ff6a2b" stroke-width="${2*k}"/>`;
+  w.poly.forEach((q,i)=>s+=`<circle cx="${q[0]}" cy="${q[1]}" r="${(i==0&&!w.closed?7:4)*k}" fill="${i==0?'#fff':'#ff6a2b'}" stroke="#000" stroke-width="${k}"/>`)}
+ svg.querySelector('.dyn').innerHTML=s;
+ $('#wclose').hidden=!(w.tool=='poly'&&!w.closed&&w.poly.length>=3);
+ $('#whint').textContent=w.tool=='select'?'Click buildings that were hit to add or remove them. Scroll to zoom, drag to pan.':w.closed?'Polygon closed. Buildings inside it are selected; severity is estimated from distance to the centre. Adjust it in the list.':w.poly.length?`${w.poly.length} points. Click the first point or press "Close polygon" to finish. Esc cancels.`:'Click on the map to place the corners of the affected area.';
+ const L=[...w.sel].map(([id,sv])=>({b:C.bl[id],sv})).sort((a,b)=>a.b.addr.localeCompare(b.b.addr,undefined,{numeric:true}));
+ $('#sellist').innerHTML=L.length?L.map(({b,sv})=>`<div class="selrow"><div><b>${esc(b.addr)}</b><div class="sm mu">${b.floors} floors · ${b.units} flats · ${b.year}</div></div><select data-sev="${b.id}" aria-label="Severity">${Object.keys(SEV).map(k=>`<option value="${k}" ${k==sv?'selected':''}>${SEV[k].n}</option>`).join('')}</select><button class="x" data-rm="${b.id}" aria-label="Remove">×</button></div>`).join(''):'<p class="sm mu" style="padding:8px">No buildings marked yet.</p>';
+ const u=L.reduce((a,x)=>a+x.b.units,0);$('#seltot').innerHTML=`<div><span class="sm mu">Buildings</span><b>${L.length}</b></div><div><span class="sm mu">Flats</span><b>${u}</b></div><div><span class="sm mu">Collapsed / partial</span><b>${L.filter(x=>x.sv=='c').length} / ${L.filter(x=>x.sv=='p').length}</b></div><div><span class="sm mu">Est. residents</span><b>≈${Math.round(u*2.7)}</b></div>`;
+ $('#binit').disabled=!L.length;$('#binit').textContent=L.length?`Initiate ${L.length} building files`:'Initiate building files'}
+$('#sellist').onchange=e=>{const s=e.target.closest('[data-sev]');if(s){S.w.sel.set(+s.dataset.sev,s.value);wdraw()}};
+$('#sellist').onclick=e=>{const b=e.target.closest('[data-rm]');if(b){S.w.sel.delete(+b.dataset.rm);wdraw()}};
+{const svg=$('#wmap');panZoom(svg,()=>S.w.vb,v=>{S.w.vb=v;svg.setAttribute('viewBox',v.join(' '));wdraw()},e=>{const w=S.w,p=svgPt(svg,e);
+  if(w.tool=='select'){const b=bAt(w.city,p);if(b){w.sel.has(b.id)?w.sel.delete(b.id):w.sel.set(b.id,'c');wdraw()}}
+  else{if(w.closed){w.poly=[];w.closed=false;w.sel.clear()}const k=w.vb[2]/svg.clientWidth;if(w.poly.length>=3&&Math.hypot(p.x-w.poly[0][0],p.y-w.poly[0][1])<10*k){closePoly();return}w.poly.push([Math.round(p.x),Math.round(p.y)]);wdraw()}},
+ {move:e=>{const p=svgPt(svg,e),w=S.w;w.cur=p;const b=bAt(w.city,p),hv=b?b.id:null;const tip=$('#tip');
+  if(b&&w.tool=='select'){tip.style.display='block';tip.style.left=e.clientX+14+'px';tip.style.top=e.clientY+14+'px';tip.innerHTML=`<b>${esc(b.addr)}</b><br>${b.floors} floors · ${b.units} flats · built ${b.year}<br><span class="mu">${b.cons}</span>`}else tip.style.display='none';
+  if(hv!==w.hover||(w.tool=='poly'&&w.poly.length&&!w.closed)){w.hover=hv;wdraw()}},leave:()=>{$('#tip').style.display='none';S.w.hover=null;wdraw()}})}
+addEventListener('keydown',e=>{if(e.key=='Escape'&&S.w.step==2&&!S.w.closed){S.w.poly=[];wdraw()}});
+$('#binit').onclick=()=>{const w=S.w;startEvent(makeEvent(w.loc,w.city,w.sel,w.closed?w.poly:null,TYPES[w.type],$('#esrc').value,$('#ebsrc').value,$('#edate').value));wstep(3)};
+function startEvent(ev){S.ev=ev;S.t=0;S.run=true;S.speed=5;S.vb=null;S.swipe=ev.cx;S.bid=null;$('#simc').hidden=false;$('#bjump').hidden=false;spd();
+ $('#bjump').innerHTML='<option value="">Open building file…</option>'+ev.hits.map(h=>`<option value="${h.id}">${esc(ev.city.bl[h.id].addr)}</option>`).join('');
+ initArea();renderEvList()}
+function renderEvList(){const ev=S.ev;if(!ev)return;$('#evlist').innerHTML=`<div class="evcard act"><b>${esc(ev.loc.city)} · ${ev.type}</b><span class="sm mu">${clockStr(0)} · ${ev.hits.length} buildings</span><span class="sm" id="evt">${fT(S.t)}</span><button data-go="area">Open area view</button></div>`}
+function renderFiles(){const ev=S.ev;if(!ev)return;const t=S.t;$('#w3t').textContent=`${ev.hits.length} building files · ${ev.loc.city}`;
+ setH($('#files'),ev.hits.map(h=>{const b=ev.city.bl[h.id],c=(x,l,ld)=>`<span class="chip ${x==null?'':t>=x?'ok':ld!=null&&t>=ld?'ld':''}">${l}</span>`;
+  return `<div class="file" data-b="${h.id}"><div style="display:flex;justify-content:space-between;gap:8px"><b>${esc(b.addr)}</b>${chip(h.sev,SEV[h.sev].n)}</div><div class="sm mu">${b.floors} floors · ${b.units} flats · ${b.cons}</div>
+  <div class="lrow">${c(h.l1,'L1 map',0)}${c(h.l2,'L2 aerial',0)}${c(h.l3,'L3 floors',0)}${c(h.l4m||h.l4g,'L4 street',0)}${c(h.bpT,'Plans',25)}${c(h.resT,'Residents',5)}${c(h.cov,'L5 drone')}${c(h.mr,'L6 3D',h.os)}</div>
+  <div class="sm mu">${pl(msgsAt(ev,t,h.id).length,'report')} · ${pl(h.dev.filter(d=>t>=d.t2).length,'phone')}</div></div>`}).join(''))}
+$('#files').onclick=e=>{const f=e.target.closest('.file');if(f)location.hash='b-'+f.dataset.b};
+$('#bdemo').onclick=()=>{const l=LOCS[0],C=genCity(l);pickLoc(l);const c=C.bl.reduce((a,b)=>Math.hypot(b.cx-600,b.cy-400)<Math.hypot(a.cx-600,a.cy-400)?b:a);
+ S.w.poly=[...Array(7)].map((_,i)=>[Math.round(c.cx+Math.cos(i/7*6.283+.3)*(118+(i%2)*22)),Math.round(c.cy+Math.sin(i/7*6.283+.3)*(92+(i%3)*14))]);S.w.city=C;closePoly();
+ startEvent(makeEvent(l,C,S.w.sel,S.w.poly,TYPES[0],0,0,'2026-11-20T13:29'));location.hash='area'};
+
+/* ---------- area ---------- */
+const LAYS=[['fp','Footprints + floors (L3)','#45c4ea'],['util','Utilities (water, power, gas)','#4aa3ff'],['poly','Event polygon','#ff6a2b'],['dmg','Damage outline','#ff4d2e'],['imsi','Phones (IMSI)','#ff3fa4'],['osint','Reports (OSINT)','#c7cdd2'],['drone','Drones + coverage','#45c4ea'],['teams','Team assignments','#e7eaec']];
+$('#alay').innerHTML=LAYS.map(([k,n,c])=>`<label><input type="checkbox" data-l="${k}" ${S.lay[k]?'checked':''}><span class="sw" style="background:${c}"></span>${n}</label>`).join('');
+$('#alay').onchange=e=>{const k=e.target.dataset.l;if(k){S.lay[k]=e.target.checked;applyA();updArea(true)}};
+function initArea(){const svg=$('#amap'),ev=S.ev;svg.innerHTML=worldSVG(ev,ev.city,'a',[0,0,ev.city.W,ev.city.H]);svg._h=null;
+ S.a3=S.a3||cam($('#a3d'),draw3A);S.a3.dirty=true;applyA()}
+function applyA(){const svg=$('#amap'),m=S.amode,L=S.lay;if(!S.ev)return;
+ setLayers(svg,{vec:m=='gis',pre:m!='gis',now:m=='now'||m=='swipe',fp:L.fp||m=='gis',util:L.util,poly:L.poly,dmg:L.dmg,lab:true});
+ svg.style.display=m=='3d'?'none':'';$('#a3d').hidden=m!='3d';$('#alay').style.display=m=='3d'?'none':'';$('#azoom').style.display=m=='3d'?'none':'';
+ [...$('#amode').children].forEach(b=>b.classList.toggle('on',b.dataset.m==m));if(m=='3d'){S.a3.dirty=true}}
+$('#amode').onclick=e=>{const b=e.target.closest('button');if(!b)return;S.amode=b.dataset.m;if(S.amode=='swipe'&&S.vb)S.swipe=S.vb[0]+S.vb[2]/2;applyA();updArea(true)};
+function avb(){const svg=$('#amap'),f=S.ev.fb;if(!S.vb){S.vb=fitVB(svg,[f.x0-40,f.y0-40,f.x1+40,f.y1+40])}return S.vb}
+{const svg=$('#amap');panZoom(svg,avb,v=>{S.vb=v;updArea(true)},e=>{const p=svgPt(svg,e),b=bAt(S.ev.city,p),pop=$('#apop');pop.hidden=true;if(!b)return;
+  if(S.ev.H[b.id]){location.hash='b-'+b.id;return}
+  const r=$('#abox').getBoundingClientRect();pop.style.left=clamp(e.clientX-r.left+10,0,r.width-250)+'px';pop.style.top=clamp(e.clientY-r.top+10,0,r.height-150)+'px';
+  pop.innerHTML=`<b>${esc(b.addr)}</b><span class="sm mu">${b.floors} floors · ${b.units} flats · not in the event</span><button class="pri" data-add="${b.id}">Add to event (opens a file)</button><button data-x>Close</button>`;pop.hidden=false},
+ {swipe:e=>S.amode=='swipe'&&Math.abs(svgPt(svg,e).x-S.swipe)<(S.vb[2]/svg.clientWidth)*16,swdrag:p=>{S.swipe=p.x;updArea(true)},
+  move:e=>{const p=svgPt(svg,e),b=bAt(S.ev.city,p),tip=$('#tip');if(!b||S.amode=='3d'){tip.style.display='none';return}const h=S.ev.H[b.id],t=S.t;
+   tip.style.display='block';tip.style.left=e.clientX+14+'px';tip.style.top=e.clientY+14+'px';
+   tip.innerHTML=`<b>${esc(b.addr)}</b><br>${b.floors} floors · ${b.units} flats`+(h?`<br>${SEV[h.sev].n} · priority ${score(S.ev,h,t)}<br>${h.dev.filter(d=>loc3(d,t)).length} phones located 3D · ${h.dev.filter(d=>t>=d.t2).length} detected<br>${msgsAt(S.ev,t,h.id).length} reports · click to open the file`:'<br><span class="mu">Not in the event · click to add</span>')},leave:()=>$('#tip').style.display='none'})}
+$('#apop').onclick=e=>{if(e.target.dataset.add){const ev=S.ev,id=+e.target.dataset.add;addHit(ev,id,'d',S.t);planOrbits(ev);$('#apop').hidden=true;initArea();startJump();location.hash='b-'+id}else if(e.target.dataset.x!=null)$('#apop').hidden=true};
+function startJump(){const ev=S.ev;$('#bjump').innerHTML='<option value="">Open building file…</option>'+ev.hits.map(h=>`<option value="${h.id}">${esc(ev.city.bl[h.id].addr)}</option>`).join('')}
+$('#azoom').onclick=e=>{const z=e.target.dataset.z;if(z==null)return;const svg=$('#amap');if(+z==0){S.vb=null;avb()}else{const v=S.vb,w=v[2]/z,h=v[3]/z;S.vb=[v[0]+(v[2]-w)/2,v[1]+(v[3]-h)/2,w,h]}updArea(true)};
+const TABS=[['prio','Priority'],['phones','Phones'],['rep','Reports'],['res','Residents'],['inv','Buildings'],['assets','Assets'],['log','Log']];
+$('#atabs').innerHTML=TABS.map(([k,n])=>`<button data-t="${k}">${n}</button>`).join('');
+$('#atabs').onclick=e=>{const b=e.target.closest('button');if(b){S.tab=b.dataset.t;$('#abody')._h=null;updArea(true)}};
+function kpis(ev,t){const H=ev.hits,n=k=>H.filter(h=>h.sev==k).length,dv=H.flatMap(h=>h.dev),l3=dv.filter(d=>loc3(d,t)).length,d2=dv.filter(d=>t>=d.t2).length,M=msgsAt(ev,t),sup=M.filter(m=>m.sms||['supported','verified'].includes(msgStatus(ev,m,t)[0])).length;
+ const rs=H.reduce((a,h)=>{const s=resSum(h,t);a.m+=s.miss;a.u+=s.unk;a.r+=s.reg;return a},{m:0,u:0,r:0}),comp=Math.round(H.reduce((a,h)=>a+lays(ev,h,t).filter(x=>x.ok).length/10,0)/H.length*100);
+ const cv=t<ev.fb.T0?0:t>=ev.fb.T1?100:Math.round((t-ev.fb.T0)/(ev.fb.T1-ev.fb.T0)*100);
+ return [[H.length,`buildings hit · ${n('c')} collapsed, ${n('p')} partial`],[`${l3} / ${d2}`,'phones located in 3D / detected'],[`${sup} / ${M.length}`,'reports supported / received'],[t<Math.min(...H.map(h=>h.resT))?'—':rs.m,`residents reported missing · ${rs.u} unknown`],[comp+'%','building files complete (avg)'],[cv+'%','drone coverage of the event area']]}
+function updArea(force){const ev=S.ev;if(!ev)return;const t=S.t,svg=$('#amap');
+ setH($('#kpis'),kpis(ev,t).map(k=>`<div class="kpi"><b>${k[0]}</b><span>${k[1]}</span></div>`).join(''));
+ if(S.amode=='3d'){S.a3.dirty=true}else{const vb=avb();svg.setAttribute('viewBox',vb.join(' '));const k=vb[2]/(svg.clientWidth||900);
+  setCov(svg,'a',ev,t,S.amode=='swipe'?S.swipe:null);
+  svg.querySelector('.dyn').innerHTML=dynSVG(ev,t,k,{cov:S.lay.drone,osint:S.lay.osint,imsi:S.lay.imsi,badge:true,rank:true,teams:S.lay.teams,drone:S.lay.drone,swx:S.amode=='swipe'?S.swipe:null,swy:vb[1]+vb[3]/2})}
+ const ov=orthoV(t),f=ev.fb,lbl=S.amode=='pre'?`Pre-disaster aerial · ${SRC[ev.loc.cc].base[ev.src]}`:S.amode=='gis'?`GIS map · ${SRC[ev.loc.cc].b[ev.bsrc]}`:S.amode=='3d'?'3D area context (L6b) · drag to rotate, scroll to zoom. Phones shown as magenta points':
+  t<f.T0?`Mapping drone launches at ${fT(f.T0)} · showing pre-disaster aerial`:t<f.T1?`Live preview · mapping flight ${Math.round((t-f.T0)/(f.T1-f.T0)*100)}%`:!ov?`Orthophoto processing on field GPU ${Math.round((t-f.T1)/(68-f.T1)*100)}%`:`Drone orthophoto ${ov[1]} · ${fT(ov[0])}`;
+ setH($('#ostat'),(S.amode=='swipe'?'<b>Swipe:</b> left pre-disaster, right current. Drag the handle.<br>':'')+lbl);
+ $('#atabs').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.t==S.tab));
+ setH($('#abody'),sideTab(ev,t))}
+function lays(ev,h,t){const b=ev.city.bl[h.id],cc=ev.loc.cc;return[
+ {k:'L1',n:'Base map and address',s:SRC[cc].base[1],r:h.l1},{k:'L2',n:'Pre-disaster aerial',s:SRC[cc].base[ev.src].split(' (')[0],r:h.l2},{k:'L3',n:'Footprint and floors',s:SRC[cc].b[ev.bsrc],r:h.l3},
+ {k:'L4',n:'Street-level imagery',s:h.l4m?'Mapillary cache + Google (online)':'Google Street View (online only)',r:h.l4m||h.l4g},{k:'Arch',n:'Plans and construction',s:h.bpA?SRC[cc].arch:'Not in archive · inferred plan',r:h.bpT},
+ {k:'Res',n:'Residents register',s:SRC[cc].res,r:h.resT},{k:'L5',n:'Drone orthophoto',s:'M-1 mapping flight',r:Math.max(h.cov,68)},{k:'L6',n:'3D model (Gaussian splat)',s:`${h.dr} orbit · field GPU`,r:h.mr},
+ {k:'L7',n:'Reports (OSINT)',s:'Telegram, X, tiplines, 104',r:Math.min(...msgsAt(ev,1e9,h.id).map(m=>m.t),1e9)},{k:'L8',n:'Phones (IMSI)',s:'Cellular locator · Phase 2',r:h.dev.length?Math.min(...h.dev.map(d=>d.t2)):null}].map(x=>({...x,ok:x.r!=null&&t>=x.r}))}
+function sideTab(ev,t){const C=ev.city,tm=SRC[ev.loc.cc].teams,rk=[...ev.hits].sort((a,b)=>score(ev,b,t)-score(ev,a,t));
+ if(S.tab=='prio')return `<p class="sm mu" style="margin:0 0 8px">Ranked by severity, phones located, supported reports and missing residents. Updates as data arrives.</p><table><thead><tr><th>#</th><th>Building</th><th class="n">Ph</th><th class="n">Rep</th><th>Score</th><th>Team</th></tr></thead><tbody>${rk.map((h,i)=>{const b=C.bl[h.id],sc=score(ev,h,t),l=h.dev.filter(d=>loc3(d,t)).length,dd=h.dev.filter(d=>t>=d.t2).length;
+  return `<tr class="cl" data-b="${h.id}"><td>${i+1}</td><td><b>${esc(b.addr)}</b><br>${chip(h.sev,SEV[h.sev].n)}</td><td class="n">${l}${dd>l?`<span class="mu">+${dd-l}</span>`:''}</td><td class="n">${msgsAt(ev,t,h.id).length}</td><td><b>${sc}</b><div class="bar"><i style="width:${sc}%"></i></div></td><td><select data-team="${h.id}" aria-label="Assign team" style="min-height:30px;padding:2px 4px;font-size:12.5px;max-width:120px">${tm.map(x=>`<option ${ev.team[h.id]==x||(!ev.team[h.id]&&x=='Unassigned')?'selected':''}>${x}</option>`).join('')}</select></td></tr>`}).join('')}</tbody></table>`;
+ if(S.tab=='phones'){const rows=ev.hits.flatMap(h=>h.dev.filter(d=>t>=d.t2).map(d=>({h,d})));const resp=t>20?Math.min(46,Math.floor((t-20)/4)):0;
+  return `<div class="phase2">Phase 2 layer: active cellular locator on the drone. Pending spectrum licence. Data here is simulated.</div><p class="sm mu" style="margin:0 0 8px">${rows.length} phones detected · ${rows.filter(r=>loc3(r.d,t)).length} located in 3D · ${resp} rescue-team phones filtered out</p>
+  <button data-act="smsall" style="margin-bottom:8px">Send SMS to all located phones</button><table><thead><tr><th>Phone</th><th>Building</th><th>Fix</th><th>SMS</th></tr></thead><tbody>${rows.map(({h,d})=>{const b=C.bl[h.id],l=loc3(d,t);return `<tr class="cl" data-b="${h.id}"><td>P${d.k+1} <span class="mu">${d.imsi.slice(-4)}</span><br><span class="mu">${d.carrier}</span></td><td>${esc(b.addr)}</td><td>${l?`3D ±${d.acc.toFixed(1)} m<br>floor ${fl(d.floor)}`:'2D ±20 m'}${alive(d,t)?'':'<br><span class="mu">signal lost</span>'}</td><td>${smsCell(ev,h,d,t)}</td></tr>`}).join('')}</tbody></table>`}
+ if(S.tab=='rep'){const M=msgsAt(ev,t).filter(m=>{const s=m.sms?'supported':msgStatus(ev,m,t)[0];return S.rf=='all'||S.rf==s});
+  return `<div class="seg" style="margin-bottom:8px" id="rf">${['all','reported','supported','verified','flagged'].map(k=>`<button data-rf="${k}" class="${S.rf==k?'on':''}">${k[0].toUpperCase()+k.slice(1)}</button>`).join('')}</div><div class="feed">${M.map(m=>msgCard(ev,m,t,true)).join('')||'<p class="sm mu">No reports in this filter yet.</p>'}</div>`}
+ if(S.tab=='res'){let tot={reg:0,loc:0,miss:0,unk:0};const rows=ev.hits.map(h=>{const s=resSum(h,t);if(t>=h.resT)for(const k in tot)tot[k]+=s[k];return{h,s}});
+  return `<p class="sm mu" style="margin:0 0 8px">Source: ${SRC[ev.loc.cc].res}. Names are hidden in this view.</p><table><thead><tr><th>Building</th><th class="n">Reg.</th><th class="n">Located</th><th class="n">Missing</th><th class="n">Unknown</th></tr></thead><tbody>${rows.map(({h,s})=>`<tr class="cl" data-b="${h.id}"><td>${esc(C.bl[h.id].addr)}</td>${t<h.resT?'<td colspan="4" class="mu">Register requested</td>':`<td class="n">${s.reg}</td><td class="n">${s.loc}</td><td class="n"><b>${s.miss}</b></td><td class="n">${s.unk}</td>`}</tr>`).join('')}<tr><td><b>Total</b></td><td class="n">${tot.reg}</td><td class="n">${tot.loc}</td><td class="n"><b>${tot.miss}</b></td><td class="n">${tot.unk}</td></tr></tbody></table>`}
+ if(S.tab=='inv')return `<p class="sm mu" style="margin:0 0 8px">Street-level view of every hit building (pre-event imagery) with key construction data.</p><div class="inv">${rk.map(h=>{const b=C.bl[h.id];return `<div class="invc" data-b="${h.id}"><svg viewBox="0 0 400 240">${t>=(h.l4m||h.l4g)?facade(b):'<rect width="400" height="240" fill="#1b2024"/><text x="200" y="125" fill="#929ba2" font-size="22" text-anchor="middle">loading street view</text>'}</svg><div><b>${esc(b.addr)}</b> ${chip(h.sev,SEV[h.sev].n)}<br>${b.floors}F · ${b.units} flats · ${b.year}<br><span class="mu">${b.shelter}</span><br><span class="mu">Plans: ${t<h.bpT?'requested':h.bpA?'received':'inferred'} · 3D: ${t>=h.mr?'ready':t>=h.os?'in progress':'queued'}</span></div></div>`}).join('')}</div>`;
+ if(S.tab=='assets')return assets(ev,t);
+ return `<div class="log">${logAt(ev,t).slice(0,80).map(l=>`<div><span>${fT(l.t)}</span><span>${l.txt}</span></div>`).join('')}</div>`}
+function smsCell(ev,h,d,t){const key=h.id+'-'+d.k,s=ev.sms[key];if(!loc3(d,t)&&!alive(d,t))return'<span class="mu">—</span>';if(s==null)return`<button data-act="sms" data-k="${key}" style="min-height:30px;padding:2px 9px;font-size:12.5px">Send SMS</button>`;
+ if(!alive(d,s+.5))return'<span class="mu">Not delivered</span>';if(d.reply&&t>=s+d.rd)return`<span style="color:#ffc4e3">“${esc(d.reply.replace('{F}',fl(d.floor)))}”</span>`;return t>=s+.5?'<span class="mu">Delivered · waiting</span>':'<span class="mu">Sending…</span>'}
+function msgCard(ev,m,t,showB){const[s,why]=m.sms?['supported','Direct from a located phone']:msgStatus(ev,m,t),b=ev.city.bl[m.b];
+ return `<div class="msg ${s}"><div class="meta"><b style="color:var(--ink)">${m.ch}</b><span>${fT(m.t)}</span>${showB?`<a href="#b-${m.b}" style="color:var(--cy)">${esc(b.addr)}</a>`:''}${m.lang&&m.lang!='en'?`<span>translated from ${m.lang=='he'?'Hebrew':'Arabic'}</span>`:''}</div><div>${esc(m.txt)}</div>
+ <div class="meta">${chip(s=='verified'?'ok':s=='flagged'?'fl':s=='supported'?'p':'',why)}<span>extracted: floor ${fl(m.floor)}${m.apt?` · apt ${m.apt}`:''}</span><span>${m.srcs>1?'2 independent sources':'1 source'}</span></div>
+ ${!m.sms&&!m.fake&&s!='verified'?`<button data-act="ver" data-m="${m.id}">Mark field-verified</button>`:''}</div>`}
+function assets(ev,t){const f=ev.fb,dp=dronePos(ev,t),task=id=>{const d=ev.drones.find(x=>x.id==id),k=d.tasks.find(k=>t>=k.s&&t<k.e),nx=d.tasks.filter(k=>k.s>t).length;return k?`Orbiting ${esc(ev.city.bl[k.b].addr)} for the 3D model`:nx?`Idle · ${nx} orbit(s) queued`:'Idle'};
+ const m1=t<f.T0?'On vehicle · preflight checks':t<f.T1?`Mapping flight · strip ${Math.min(f.n,Math.floor((t-f.T0)/(f.T1-f.T0)*f.n)+1)} of ${f.n} · battery ${Math.round(100-(t-f.T0)*2.8)}%`:t<50?'Landed · battery swap':task('M-1');
+ const jobs=[];if(t>=f.T1&&t<68)jobs.push(['Orthophoto v1 (OpenDroneMap)',(t-f.T1)/(68-f.T1)]);for(const h of ev.hits)if(t>=h.oe&&t<h.mr)jobs.push([`3D splat · ${ev.city.bl[h.id].addr}`,(t-h.oe)/(h.mr-h.oe)]);
+ const up=ev.hits.filter(h=>t>=h.mr&&t<h.mr+9).map(h=>[`Upload PLY 280 MB · ${ev.city.bl[h.id].addr}`,(t-h.mr)/9]);
+ return `<div class="asset"><b>M-1 · mapping drone</b><span class="sm">${m1}</span></div><div class="asset"><b>O-1 · 3D orbit drone</b><span class="sm">${t<42?'Preflight · first orbit at '+fT(42):task('O-1')}</span></div>
+ <div class="asset"><b>T-3 · team drone (DJI M30T, joined from another team)</b><span class="sm">${t<110?'Joins at '+fT(110):dp.some(d=>d.id=='T-3')?'Refresh flight over the whole area':'Standby · next refresh at '+fT([120,180,240,300].find(x=>x>t)||300)}</span></div>
+ <div class="asset"><b>Starlink</b><span class="sm">${t<25?'Not connected · field kit works offline · connects at '+fT(25):'Connected · ≈18 Mbps up · event synced to the cloud'}</span></div>
+ <div class="asset"><b>Field GPU · processing</b>${jobs.length?jobs.map(j=>`<span class="sm">${esc(j[0])}</span><div class="bar"><i style="width:${Math.round(j[1]*100)}%;background:var(--cy)"></i></div>`).join(''):'<span class="sm mu">No jobs running</span>'}</div>
+ <div class="asset"><b>Uploads to cloud</b>${up.length?up.map(j=>`<span class="sm">${esc(j[0])}</span><div class="bar"><i style="width:${Math.round(j[1]*100)}%;background:var(--cy)"></i></div>`).join(''):'<span class="sm mu">Queue empty</span>'}</div>`}
+function logAt(ev,t){if(!ev._log){const C=ev.city,L=[[0,`Event opened · ${ev.type} · ${ev.hits.length} building files created`],[1,'Offline layers L1 to L4 loading from the field kit'],[ev.fb.T0,'M-1 launched · mapping flight started'],[25,'Starlink connected · event synced to the cloud'],[ev.fb.T1,'M-1 landed · orthophoto processing started'],[68,'Orthophoto v1 published to all teams'],[110,'Team drone T-3 joined the event'],[128,'Orthophoto v2 (refresh)'],[188,'Orthophoto v3 (refresh)']];
+  for(const h of ev.hits){const a=C.bl[h.id].addr;L.push([h.os,`${h.dr} orbiting ${a}`],[h.mr,`3D model ready · ${a}`],[h.bpT,`${h.bpA?'Plans received':'No plans in archive, plan inferred'} · ${a}`],[h.resT,`Residents register loaded · ${a}`]);
+   for(const d of h.dev){L.push([d.t2,`Phone detected (2D ±20 m) near ${a}`]);if(d.t3!=null&&alive(d,d.t3))L.push([d.t3,`Phone P${d.k+1} located in 3D · ${a} · floor ${fl(d.floor)} · ±${d.acc.toFixed(1)} m`])}}
+  for(const m of ev.msgs)L.push([m.t,`${m.fake?'Report (suspicious cluster)':'Report'} · ${m.ch} → ${C.bl[m.b].addr}`]);ev._log=L.map(x=>({t:x[0],txt:esc(x[1])})).sort((a,b)=>b.t-a.t)}
+ return ev._log.filter(l=>l.t<=t)}
+document.addEventListener('pointerdown',act);document.addEventListener('click',e=>{if(e.detail===0)act(e)});
+function act(e){const ev=S.ev,a=e.target.closest('[data-act]');if(a&&ev){e.preventDefault();e.stopPropagation();
+  if(a.dataset.act=='sms'){ev.sms[a.dataset.k]=S.t}else if(a.dataset.act=='ver'){ev.ver[a.dataset.m]=1}
+  else if(a.dataset.act=='smsall'){for(const h of ev.hits)for(const d of h.dev)if(loc3(d,S.t)&&ev.sms[h.id+'-'+d.k]==null)ev.sms[h.id+'-'+d.k]=S.t}
+  $('#abody')._h=null;refresh();return}
+ const rf=e.target.closest('[data-rf]');if(rf){S.rf=rf.dataset.rf;updArea(true);return}
+ if(e.target.closest('select,a,button'))return;const r=e.target.closest('[data-b]');if(r&&(r.closest('#abody')))location.hash='b-'+r.dataset.b}
+$('#abody').onchange=e=>{const s=e.target.closest('[data-team]');if(s){S.ev.team[s.dataset.team]=s.value=='Unassigned'?null:s.value;updArea(true)}};
+document.addEventListener('click',e=>{const g=e.target.closest('[data-go]');if(g)location.hash=g.dataset.go});
+
+/* ---------- building file ---------- */
+function openB(id){const ev=S.ev,b=ev.city.bl[id],h=ev.H[id];S.bid=id;S.openId=id;if(S.fl[id]==null)S.fl[id]=Math.min(b.floors-1,h.dev.length?h.dev[0].floor:1);
+ const bb=[b.cx-130,b.cy-95,b.cx+130,b.cy+95],bbm=[b.cx-260,b.cy-190,b.cx+260,b.cy+190];
+ for(const[sid,pid,box] of[['#bnow','bn',bb],['#bpre','bp',bb],['#bmap','bm',bbm]]){const svg=$(sid);svg.innerHTML=worldSVG(ev,ev.city,pid,box,{big:true});svg.setAttribute('viewBox',[box[0],box[1],box[2]-box[0],box[3]-box[1]].join(' '));svg.setAttribute('preserveAspectRatio','xMidYMid slice')}
+ setLayers($('#bpre'),{now:false,dmg:false,poly:false,lab:true});setLayers($('#bmap'),{vec:true,pre:false,now:false,fp:false,lab:true});setLayers($('#bnow'),{lab:false,poly:false});
+ $('#bmap').querySelector('.dyn').innerHTML=`<rect x="${b.x-4}" y="${b.y-4}" width="${b.w+8}" height="${b.h+8}" fill="#ff6a2b55" stroke="#ff6a2b" stroke-width="2.5"/><circle cx="${b.cx}" cy="${b.cy}" r="70" fill="none" stroke="#ff6a2b" stroke-dasharray="5 4"/>`+ev.hits.filter(x=>x.id!=id).map(x=>{const o=ev.city.bl[x.id];return`<rect x="${o.x}" y="${o.y}" width="${o.w}" height="${o.h}" fill="${SEV[x.sev].col}33" stroke="${SEV[x.sev].col}"/>`}).join('');
+ $('#bpre').querySelector('.dyn').innerHTML=`<rect x="${b.x-3}" y="${b.y-3}" width="${b.w+6}" height="${b.h+6}" fill="none" stroke="#fff" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+ S.b3=S.b3||cam($('#b3d'),draw3B);S.b3.g=null;S.b3.dirty=true;$('#bsv')._h=null;$('#bbp')._h=null;['#bres','#bos','#bim','#blay','#bhead'].forEach(s=>$(s)._h=null);
+ $('#s-map').textContent=SRC[ev.loc.cc].base[1]+' · GIS';$('#s-pre').textContent=SRC[ev.loc.cc].base[ev.src];$('#s-3d').textContent=`Gaussian splat · ${h.dr} orbit`;$('#bjump').value=id;updB()}
+$('#bnowm').onclick=e=>{const b=e.target.closest('button');if(!b)return;S.bnow=b.dataset.m;[...$('#bnowm').children].forEach(x=>x.classList.toggle('on',x==b));updB()};
+$('#b3dm').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.m=='r'){S.rot=!S.rot;b.classList.toggle('on',S.rot)}else{S.x3=!S.x3;b.classList.toggle('on',S.x3)}S.b3.dirty=true};
+$('#bfl').onclick=e=>{const b=e.target.closest('[data-f]');if(b){S.fl[S.bid]=+b.dataset.f;$('#bbp')._h=null;updB()}};
+$('#svsw').onclick=e=>{const b=e.target.closest('[data-s]');if(b&&!b.disabled){S.sv[S.bid]=b.dataset.s;updB()}};
+{const svg=$('#bnow');let dr=false;svg.addEventListener('pointerdown',e=>{if(S.bnow=='swipe'){dr=true;svg.setPointerCapture(e.pointerId)}});svg.addEventListener('pointermove',e=>{if(dr){S.bsw=svgPt(svg,e).x;updB()}});svg.addEventListener('pointerup',()=>dr=false)}
+$('#bhead').onchange=e=>{const ev=S.ev,h=ev.H[S.bid];if(e.target.id=='bsev'){h.sev=e.target.value;ev._log=null;openB(S.bid);initArea()}if(e.target.id=='bteam'){ev.team[S.bid]=e.target.value=='Unassigned'?null:e.target.value}};
+function updB(){const ev=S.ev,id=S.bid;if(!ev||id==null||S.openId!==id)return;const t=S.t,b=ev.city.bl[id],h=ev.H[id],cc=ev.loc.cc;
+ const rk=[...ev.hits].sort((a,c)=>score(ev,c,t)-score(ev,a,t)),ri=rk.indexOf(h),L=lays(ev,h,t),comp=L.filter(x=>x.ok).length,tm=SRC[cc].teams,idx=ev.hits.indexOf(h);
+ setH($('#bhead'),`<a href="#area" style="color:var(--cy)">← Area</a><div><h1>${esc(b.addr)}</h1><span class="sm mu">${esc(ev.loc.city)} · entrance ${b.ent} · file opened ${fT(h.at)}</span></div>
+  <div class="facts"><select id="bsev" aria-label="Severity">${Object.keys(SEV).map(k=>`<option value="${k}" ${k==h.sev?'selected':''}>${SEV[k].n}</option>`).join('')}</select>${chip('',b.floors+' floors')}${chip('',b.units+' flats')}${chip('','built '+b.year)}${chip('',b.cons)}${chip('',b.shelter)}</div>
+  <div class="score"><span class="sm mu">Priority ${ri+1} of ${ev.hits.length}</span><b>${score(ev,h,t)}</b><div class="bar"><i style="width:${score(ev,h,t)}%"></i></div></div>
+  <div class="score"><span class="sm mu">File complete</span><b>${comp}/10</b><div class="bar"><i style="width:${comp*10}%;background:var(--cy)"></i></div></div>
+  <label class="sm mu">Team <select id="bteam">${tm.map(x=>`<option ${ev.team[id]==x||(!ev.team[id]&&x=='Unassigned')?'selected':''}>${x}</option>`).join('')}</select></label>
+  <span class="grow"></span><a href="#b-${ev.hits[(idx-1+ev.hits.length)%ev.hits.length].id}" style="color:var(--cy)">‹ Prev</a><a href="#b-${ev.hits[(idx+1)%ev.hits.length].id}" style="color:var(--cy)">Next ›</a>`);
+ // current aerial
+ const ov=orthoV(t),svn=$('#bnow');setCov(svn,'bn',ev,t,S.bnow=='swipe'?(S.bsw??b.cx):null);
+ svn.querySelector('.dyn').innerHTML=`<rect x="${b.x-3}" y="${b.y-3}" width="${b.w+6}" height="${b.h+6}" fill="none" stroke="#fff" stroke-width="1" stroke-dasharray="4 3"/>`+dynSVG(ev,t,.5,{imsi:true,osint:true,drone:true,only:id,lbl:true,cov:true,swx:S.bnow=='swipe'?(S.bsw??b.cx):null,swy:b.cy});
+ $('#s-now').textContent=t<h.cov?'Awaiting drone pass':ov?`Orthophoto ${ov[1]} · ${fT(ov[0])}`:'Live preview frames (unstitched)';
+ setH($('#c-now'),t<h.cov?chip('',`ETA ${fT(h.cov)}`):ov?chip('ok','Ready'):chip('ld','Preview'));
+ waitBox($('#w-now'),t<h.cov,t<ev.fb.T0?'Drone not launched yet':'Drone on its way to this building',`Mapping drone M-1 passes over at ${fT(h.cov)}. The pre-disaster image is shown until then.`,t<ev.fb.T0?null:clamp((t-ev.fb.T0)/(h.cov-ev.fb.T0),0,1));
+ if($('#w-now').firstChild)$('#w-now').firstChild.style.background='#0e1113a6';
+ // 3D
+ const o3=t<h.os?['Queued for 3D orbit',`${h.dr} starts orbit at ${fT(h.os)}. Model target on screen ≤120 min after landing.`,null]:t<h.oe?[`${h.dr} orbiting the building`,'Oblique photos for the splat',(t-h.os)/(h.oe-h.os)]:t<h.mr?['Building the 3D model','Gaussian splat on the field GPU',(t-h.oe)/(h.mr-h.oe)]:null;
+ setH($('#c-3d'),o3?chip(t<h.os?'':'ld',t<h.os?'Queued':'In progress'):chip('ok','Ready'));waitBox($('#w-3d'),!!o3,o3&&o3[0],o3&&o3[1],o3&&o3[2]);if(!o3)S.b3.dirty=true;
+ // map / pre
+ setH($('#c-map'),st(t,h.l1));setH($('#c-pre'),st(t,h.l2));waitBox($('#w-map'),t<h.l1,'Loading from offline pack','L1 base map');waitBox($('#w-pre'),t<h.l2,'Loading from offline pack','L2 aerial');
+ // street view
+ const sv=S.sv[id]||(h.l4m?'m':'g'),gOk=t>=h.l4g,mOk=h.l4m&&t>=h.l4m;
+ setH($('#svsw'),`<div class="seg"><button data-s="m" class="${sv=='m'?'on':''}" ${h.l4m?'':'disabled'}>Mapillary</button><button data-s="g" class="${sv=='g'?'on':''}">Google</button></div>`);
+ const svReady=sv=='m'?mOk:gOk;setH($('#bsv'),svReady?facade(b,400,240,sv=='g'):'');
+ $('#s-sv').textContent=sv=='m'?'Mapillary · captured 2024 · offline cache':`Google Street View · pano ID CAoSL${(b.id*7919).toString(36).toUpperCase()}… · online only`;
+ setH($('#c-sv'),svReady?chip('ok','Ready'):chip(sv=='g'&&t<25?'':'ld',sv=='g'&&t<25?'Needs Starlink':'Loading'));
+ waitBox($('#w-sv'),!svReady,sv=='g'&&t<25?'Online only':'Loading street view',sv=='g'?`We store only the pano ID. The image loads once Starlink connects (${fT(25)}).`:'From the offline cache');
+ // blueprint
+ const f=S.fl[id];setH($('#bfl'),`<span class="sm mu" style="align-self:center;margin-right:4px">Floor</span>`+[...Array(b.floors)].map((_,i)=>{const n=h.dev.filter(d=>d.floor==i&&loc3(d,t)).length;return`<button data-f="${i}" class="${i==f?'on':''}" style="${n?'border-color:#ff3fa4':''}">${fl(i)}${n?` <span style="color:#ff3fa4">•${n}</span>`:''}</button>`}).join(''));
+ setH($('#bbp'),t>=h.bpT?planSVG(b,h,f,t):'');$('#s-bp').textContent=t<h.bpT?`Requested from ${SRC[cc].arch}`:h.bpA?`${SRC[cc].arch} · permit plan ${b.year} · scanned`:'Not in archive · plan inferred from footprint and floor count';
+ setH($('#c-bp'),t>=h.bpT?chip(h.bpA?'ok':'wa',h.bpA?'Received':'Inferred'):chip(t>=25?'ld':'',t>=25?'Requested':'Needs Starlink'));waitBox($('#w-bp'),t<h.bpT,'Plans requested',`${SRC[cc].arch} · expected around ${fT(h.bpT)}`);
+ // residents
+ const rs=resSum(h,t);$('#s-res').textContent=SRC[cc].res;setH($('#c-res'),t<h.resT?chip('ld','Requested'):chip('ok','Live'));
+ setH($('#bres'),t<h.resT?`<p class="mu">Residents register requested. Expected around ${fT(h.resT)}.</p>`:`<div class="facts" style="margin-bottom:8px">${chip('',rs.reg+' registered')}${chip('ok',rs.loc+' located')}${chip('c',rs.miss+' reported missing')}${chip('',rs.unk+' unknown')}</div>
+  <p class="sm mu" style="margin:0 0 6px">Names hidden · role-based access</p><table><thead><tr><th>Apt</th><th>Fl</th><th class="n">Reg.</th><th>Status</th><th class="n">Phones</th></tr></thead><tbody>${h.units.filter(u=>u.reg).sort((a,c)=>(resStat(h,c,t)=='Reported missing')-(resStat(h,a,t)=='Reported missing')||c.floor-a.floor).map(u=>{const s=resStat(h,u,t),n=h.dev.filter(d=>d.floor==u.floor&&loc3(d,t)).length;
+   return`<tr><td>${u.apt}</td><td>${fl(u.floor)}</td><td class="n">${u.reg}</td><td>${s=='Reported missing'?`<b style="color:#ff8a70">${s}</b>`:s.startsWith('Located')?`<span style="color:#9fdcf0">${s}</span>`:`<span class="mu">${s}</span>`}</td><td class="n">${n?`<span style="color:#ff3fa4">${n} on floor</span>`:''}</td></tr>`}).join('')}</tbody></table>`);
+ // osint
+ const M=msgsAt(ev,t,id);setH($('#c-os'),chip(M.length?'ok':'',pl(M.length,'report')));setH($('#bos'),M.length?`<div class="feed">${M.map(m=>msgCard(ev,m,t,false)).join('')}</div>`:'<p class="mu">No reports linked to this building yet. Incoming messages are matched to the building by address, floor and apartment.</p>');
+ // imsi
+ const D=h.dev.filter(d=>t>=d.t2);setH($('#c-im'),chip(D.length?'mg':'',`${D.filter(d=>loc3(d,t)).length} 3D · ${D.length} detected`));
+ setH($('#bim'),`<div class="phase2">Phase 2 layer: active cellular locator (RES-Q-CELL class, <3 m in 3D). Pending spectrum licence. Simulated data.</div>${D.length?`<table><thead><tr><th>Phone</th><th>Network</th><th>Detected</th><th>Fix</th><th>Floor / height now</th><th class="n">Signal</th><th>Status</th><th>SMS</th></tr></thead><tbody>${D.map(d=>{const l=loc3(d,t),M2=cmodel(b,h);
+  return`<tr><td><b>P${d.k+1}</b> <span class="mu">${d.imsi}</span></td><td>${d.carrier}</td><td>${fT(d.t2)}</td><td>${l?`<b style="color:#ff8fc8">3D ±${d.acc.toFixed(1)} m</b>`:t>=h.os?'2D ±20 m · orbit running':'2D ±20 m · 3D at orbit '+fT(h.os)}</td><td>${l?`Floor ${fl(d.floor)} · ${(M2.z(d.floor,d.fx,d.fy)+.8).toFixed(1)} m above ground`:'—'}</td><td class="n">${d.rssi} dBm</td><td>${alive(d,t)?'Active':`Signal lost ${fT(d.dead)}`}</td><td>${smsCell(ev,h,d,t)}</td></tr>`}).join('')}</tbody></table>`:`<p class="mu">${t<h.cov?`No scan of this building yet. The drone passes at ${fT(h.cov)}.`:'No phones detected so far.'}</p>`}`);
+ // layers
+ setH($('#c-lay'),chip(comp==10?'ok':'ld',comp+'/10'));
+ setH($('#blay'),L.map(x=>`<div><code>${x.k}</code><span>${x.n}<br><span class="sm mu">${esc(x.s)}</span></span>${x.r==null?chip('','None'):x.ok?chip('ok',fT(x.r)):chip('','ETA '+(x.r<1e8?fT(x.r):'—'))}</div>`).join(''))}
+
+/* ---------- routing, clock, loop ---------- */
+function refresh(){const t=S.t;if(S.ev){$('#clock').innerHTML=`${fT(t)}<small>${clockStr(t)}</small>`;$('#evn').textContent=`${S.ev.loc.city} · ${S.ev.type}`;
+  const on=t>=25;$('#link').innerHTML=`<span class="dot ${on?'ok':'off'}"></span>${on?'Starlink · synced':'Offline · field kit only'}`;const e=$('#evt');if(e)e.textContent=fT(t)}
+ if(S.view=='area')updArea();if(S.view=='b')updB();if(S.view=='command'&&S.w.step==3)renderFiles()}
+function spd(){[...$('#simc').children].forEach(b=>b.classList.toggle('on',b.dataset.sp!=null&&(+b.dataset.sp==(S.run?S.speed:0))))}
+$('#simc').onclick=e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.sp!=null){const v=+b.dataset.sp;if(v){S.speed=v;S.run=true}else S.run=false}if(b.dataset.jump)S.t+=+b.dataset.jump;spd();refresh()};
+$('#bjump').onchange=e=>{if(e.target.value!=='')location.hash='b-'+e.target.value};
+function route(){const hs=location.hash.slice(1)||'command';let v='command',id=null;if(hs=='area'&&S.ev)v='area';else if(/^b-\d+$/.test(hs)&&S.ev&&S.ev.H[+hs.slice(2)])v='b',id=+hs.slice(2);if(id!=null)S.bid=id;
+ S.view=v;['command','area','b'].forEach(k=>$('#v-'+k).classList.toggle('on',k==v));
+ $('#n-command').classList.toggle('on',v=='command');$('#n-area').classList.toggle('on',v=='area');$('#n-area').classList.toggle('dis',!S.ev);$('#n-b').classList.toggle('on',v=='b');$('#n-b').classList.toggle('dis',S.bid==null);
+ if(S.bid!=null)$('#n-b').href='#b-'+S.bid;$('#tip').style.display='none';
+ if(v=='area'){requestAnimationFrame(()=>{if(!S.vb)avb();updArea(true)})}if(v=='b')requestAnimationFrame(()=>openB(id));if(v=='command'&&S.w.step==3)renderFiles();refresh()}
+addEventListener('hashchange',route);addEventListener('resize',()=>{if(S.view=='area'&&S.vb){const svg=$('#amap');S.vb=fitVB(svg,[S.vb[0],S.vb[1],S.vb[0]+S.vb[2],S.vb[1]+S.vb[3]]);updArea(true)}if(S.a3)S.a3.dirty=true;if(S.b3)S.b3.dirty=true});
+let last=performance.now(),acc=0;
+function loop(now){const dt=Math.min(.25,(now-last)/1000);last=now;if(S.ev&&S.run)S.t+=dt*S.speed;acc+=dt;if(acc>.25){acc=0;refresh()}
+ if(S.view=='b'&&S.b3&&S.ev&&S.t>=S.ev.H[S.bid]?.mr){if(S.rot){S.b3.yaw+=dt*.35;S.b3.dirty=true}if(S.b3.dirty)S.b3.render()}
+ if(S.view=='area'&&S.amode=='3d'&&S.a3&&S.a3.dirty)S.a3.render();requestAnimationFrame(loop)}
+route();requestAnimationFrame(loop);
+})();
+</script></body></html>

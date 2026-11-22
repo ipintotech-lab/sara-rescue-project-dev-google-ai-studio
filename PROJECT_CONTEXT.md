@@ -21,7 +21,7 @@ This repository and `sara-rescue-project-dev` are disconnected.
 
 ## 3. What Uri wants
 
-The source is Uri's UI design, `SARA C2 simulation.html` (November 2026): a single-page simulation of a rescue command post console. It is the UX spec: screens, panes, flows, status chips and wording.
+The source is Uri's UI design, `design/SARA_C2_simulation.html` in this repository (November 2026): a single-page simulation of a rescue command post console. It is the UX spec: screens, panes, flows, status chips and wording. Open it in a browser to click through it. It is a reference, not part of the app: do not edit it.
 
 Three screens:
 
@@ -78,4 +78,3 @@ Each slice ends in something Uri can open and click.
 - Which Google account holds the AI Studio project and its billing.
 - Who works in AI Studio (Israel, Uri or an agent), and whether code is also edited directly in this repository.
 - Who may open the published app, and whether its URL is shared outside the team.
-- Add Uri's design file (`SARA C2 simulation.html`) to this repository, so the builder has the spec in front of it.
